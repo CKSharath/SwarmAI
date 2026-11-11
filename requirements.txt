@@ -1,0 +1,4 @@
+flask
+pymupdf
+numpy
+sentence-transformers

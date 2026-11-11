@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swarm Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("swarm.theme")==="light"?"light":"dark"}catch(e){document.documentElement.dataset.theme="dark"}</script>
+<meta name="color-scheme" content="dark light"><meta name="theme-color" content="#0B0D12">
+<style>
+/* ============ DESIGN TOKENS (the only place raw colours live) ============ */
+:root,:root[data-theme="dark"]{color-scheme:dark;
+ --bg:#0B0D12;--bg2:#11151D;--panel:#151A23;--elev:#1B2230;--hover:rgba(255,255,255,.05);--hover2:rgba(255,255,255,.09);
+ --line:#283142;--line-hi:#3C4960;--ink:#E8EDF5;--mute:#98A4B5;--faint:#7E8BA0;
+ --accent:#8B7CFF;--accent-soft:rgba(139,124,255,.16);--on-accent:#0B0D12;--accent2:#48C8D8;--ok:#40C98B;--warn:#F2B85B;--err:#F16F78;--info:#7AA2F7;
+ --trail:#F2B85B;--ant:#48C8D8;--glow:rgba(139,124,255,.07);--shadow-sm:0 1px 2px rgba(0,0,0,.35);--shadow-md:0 10px 30px rgba(0,0,0,.4);--scrim:rgba(11,13,18,.6)}
+:root[data-theme="light"]{color-scheme:light;
+ --bg:#F4F6FA;--bg2:#EDF0F6;--panel:#FFFFFF;--elev:#F6F8FC;--hover:rgba(24,34,48,.05);--hover2:rgba(24,34,48,.09);
+ --line:#DDE3EC;--line-hi:#C3CCDA;--ink:#182230;--mute:#596579;--faint:#5F6C80;
+ --accent:#6656DB;--accent-soft:rgba(102,86,219,.12);--on-accent:#FFFFFF;--accent2:#0E8696;--ok:#0F7A55;--warn:#B8791E;--err:#C23A48;--info:#3B6FD1;
+ --trail:#B8791E;--ant:#0E8696;--glow:rgba(102,86,219,.05);--shadow-sm:0 1px 2px rgba(24,34,48,.08);--shadow-md:0 10px 30px rgba(24,34,48,.12);--scrim:rgba(244,246,250,.7)}
+:root{--sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;--mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--lw:0px;--rw:0px;--r:10px}
+
+/* ============ BASE ============ */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:13.5px/1.5 var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(ellipse 70% 55% at 50% 45%,var(--glow),transparent 70%),var(--bg)}
+canvas{position:fixed;inset:0;display:block}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.005em}p{margin:0}
+h2{font-size:13px}h3{font-size:13px;margin-bottom:8px}h4{font-size:12px;color:var(--mute)}
+.mono,.kv b,.kpi b,td,.fm,.eq,.jc,.ec,code,#stats b,#tlI{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.hint{font-size:12.3px;color:var(--mute);line-height:1.5}.lbl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+:focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:6px}
+::selection{background:var(--accent-soft)}
+*{scrollbar-width:thin;scrollbar-color:var(--line-hi) transparent}
+[data-i] svg,.ico svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;display:block}
+.ico{display:inline-flex;color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes pagein{from{opacity:0;transform:translateY(6px)}}@keyframes fadein{from{opacity:0}}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line-hi);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px}
+
+/* ============ COMPONENTS ============ */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;box-shadow:var(--shadow-sm)}
+button,.pick{font:600 12.5px/1 var(--sans);height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--elev);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;position:relative;transition:background-color .15s,border-color .15s,color .15s,transform .08s}
+button:hover:not(:disabled){background:var(--hover2);border-color:var(--line-hi)}button:active:not(:disabled){transform:scale(.97)}
+button.primary{background:var(--accent);border-color:transparent;color:var(--on-accent)}button.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.1);border-color:transparent}
+button.ghost{background:transparent;color:var(--ink)}button.danger{color:var(--err);border-color:var(--err);background:transparent}
+button:disabled{opacity:.45;cursor:not-allowed}button.sm{height:26px;padding:0 9px;font-size:12px;border-radius:7px}
+button.icon-btn,.icon-btn{width:28px;height:28px;padding:0}
+button.loading{color:transparent!important;pointer-events:none}button.loading::after{content:"";position:absolute;width:13px;height:13px;border:2px solid currentColor;border-top-color:var(--on-accent);border-radius:50%;animation:spin .7s linear infinite;color:var(--line-hi)}
+button.primary.loading::after{border-color:var(--on-accent);border-top-color:transparent}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:nowrap;font:500 11px/1 var(--sans);padding:5px 8px;border-radius:6px;background:var(--ink);color:var(--bg);z-index:60;pointer-events:none}
+input[type=text],input[type=number]{width:100%;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--ink);font:inherit;transition:border-color .15s,box-shadow .15s}
+input[type=text]:focus,input[type=number]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input::placeholder{color:var(--faint)}input:disabled{opacity:.5}input[type=range]{accent-color:var(--accent);flex:1;min-width:0}
+details{margin-bottom:8px}summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--mute);margin-bottom:6px}
+.chip{display:inline-block;padding:2px 8px;margin:0 4px 4px 0;border-radius:99px;background:var(--accent-soft);font-size:12px}
+.row{display:flex;gap:8px;align-items:center;margin-top:10px}.row label{font-size:12px;color:var(--mute)}
+.tag{font-size:10px;font-weight:600;color:var(--bg);background:var(--ok);border-radius:5px;padding:1px 6px}
+
+/* ============ NAVIGATION ============ */
+#nav{position:fixed;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:4px;padding:0 14px;z-index:40;background:var(--bg2);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+#nav .brandmini{display:flex;align-items:center;gap:8px;font-size:14px;margin-right:12px;white-space:nowrap}
+#nav .tab{height:30px;padding:0 11px;border-radius:7px;background:transparent;border:0;color:var(--mute);font-weight:500;flex:none}
+#nav .tab:hover{color:var(--ink);background:var(--hover)}#nav .tab[aria-selected=true]{color:var(--ink);background:var(--accent-soft);font-weight:600}
+#nav .tab.home{margin-right:2px}#nav .vsep{width:1px;height:20px;background:var(--line);margin:0 6px;flex:none}#nav .spacer{flex:1}
+.page{display:none;position:fixed;top:48px;left:0;right:0;bottom:0;overflow:auto;z-index:20;background:var(--bg);animation:pagein .2s ease}
+body[data-tab=activity] #pg-activity,body[data-tab=bench] #pg-bench,body[data-tab=learn] #pg-learn,body[data-tab=monitor] #pg-monitor{display:block}
+.pg-in{max-width:1080px;margin:0 auto;padding:24px 20px 72px}.ph{font-size:20px;font-weight:600;margin:0 0 16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px;margin-bottom:12px}
+.phead{display:flex;align-items:center;gap:8px;margin-bottom:10px;min-height:28px}.phead h2,.phead h3{margin:0;flex:1}.phead .grow{flex:1}
+.hl{margin:0;padding-left:18px;font-size:12.5px;line-height:1.55;max-height:220px;overflow:auto}.hl small{color:var(--mute);margin-right:8px;font-family:var(--mono)}
+body:not([data-tab=ws]) .wsel{visibility:hidden;pointer-events:none}
+
+/* ============ WORKSPACE ============ */
+.wsel{transition:left .28s ease,right .28s ease,opacity .2s}
+#colL,#colR{position:fixed;top:60px;bottom:12px;width:344px;display:flex;flex-direction:column;gap:10px;pointer-events:none;z-index:10}#colL{left:16px}#colR{right:16px}
+.panel{pointer-events:auto;display:flex;flex-direction:column;min-height:0;overflow:hidden;max-height:100%;transition:opacity .22s,transform .28s,max-height .28s,padding .28s,margin .28s,border-width .28s}
+.panel .pbody{overflow:auto;min-height:0}#pIns,#pInsp{flex:1 1 0}
+.panel.min{opacity:0;transform:translateX(-14px);max-height:0;padding-top:0;padding-bottom:0;border-width:0;margin:-5px 0;pointer-events:none}#colR .panel.min{transform:translateX(14px)}
+#wsbar{position:fixed;top:60px;left:calc(var(--lw) + 16px);right:calc(var(--rw) + 16px);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;z-index:12;pointer-events:none}
+#wsbar>*{pointer-events:auto}
+#dock,#cam{display:flex;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow-sm)}#cam{flex-wrap:wrap;justify-content:flex-end}
+#dock button{width:30px;height:30px;padding:0;background:transparent;border:0;color:var(--faint)}#dock button[aria-pressed=true]{color:var(--accent);background:var(--accent-soft)}
+#dock button[data-dot="1"]::before{content:"";position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--ok);border:1.5px solid var(--panel)}
+#cam button{height:28px;padding:0 9px;font-size:12px;background:transparent;border-color:transparent;color:var(--mute);font-weight:500}#cam button:hover:not(:disabled){color:var(--ink)}
+#tl{display:none;position:fixed;left:calc(var(--lw) + 16px);right:calc(var(--rw) + 16px);bottom:12px;padding:6px 10px;align-items:center;gap:6px;z-index:5;border-radius:var(--r)}
+#tl button{height:28px;min-width:30px;padding:0 8px}#tl input{flex:1}#tlI{font-size:11.5px;color:var(--mute);white-space:nowrap}
+#htip{position:fixed;pointer-events:none;font-size:12px;padding:5px 9px;z-index:30;display:none;max-width:260px;background:var(--ink);color:var(--bg);border-radius:7px;border:0}
+#tip{display:none;position:fixed;top:108px;left:calc(var(--lw) + 16px);max-width:400px;font-size:13px;line-height:1.55;padding:12px 14px;z-index:6;box-shadow:var(--shadow-md)}#tip small{display:block;color:var(--accent);font-weight:600;margin-bottom:4px}
+
+/* input panel */
+#drop{display:block;border:1.5px dashed var(--line-hi);border-radius:10px;padding:14px;text-align:center;cursor:pointer;font-size:12.5px;color:var(--mute);transition:background-color .15s,border-color .15s}
+#drop b{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}#drop:hover,#drop.over{background:var(--accent-soft);border-color:var(--accent)}
+#stats{display:none;gap:6px;flex-wrap:wrap;margin-top:10px}#stats span{font-size:11.5px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute)}#stats b{color:var(--ink);font-weight:600}
+#q{margin-top:10px}#sugg{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}#sugg button{height:24px;padding:0 10px;font-size:12px;font-weight:500;background:var(--accent-soft);border-color:transparent;border-radius:99px}
+#status{font-size:12.3px;color:var(--mute);margin-top:10px;min-height:18px}
+/* event log */
+#logcard{display:flex;flex-direction:column}#log{list-style:none;margin:0;padding:0 4px 0 0;max-height:60vh;overflow:auto}
+#log li{position:relative;padding:0 0 9px 20px;font-size:12.8px;line-height:1.5;color:var(--ink)}#log li::before{content:"";position:absolute;left:3.5px;top:12px;bottom:-3px;width:1px;background:var(--line)}
+#log li:last-child::before{display:none}#log li i{position:absolute;left:0;top:6px;width:8px;height:8px;border-radius:50%}#log li b{font-weight:600}
+#log li.sep{padding:6px 0 10px 20px;font-weight:600;font-size:13px}#log li.sep::before{display:none}#log .empty{color:var(--mute);font-size:12.5px}
+
+/* inspector */
+#inspD[style*="block"]~#inspEmpty{display:none}#cmp{margin-top:8px}#cmp h4,#insp h4{margin:12px 0 5px;color:var(--ink);font-size:12px;display:flex;justify-content:space-between;align-items:center}
+#insp .ih{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}#insp .kv,#cmp .kv{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;gap:8px}#insp .kv span,#cmp .kv span{color:var(--mute)}
+#insp .fm{font-size:11.5px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin:5px 0;line-height:1.6;overflow-wrap:anywhere}
+#insp table,#cmp table{width:100%;border-collapse:collapse;font-size:11px}#insp td,#insp th,#cmp td,#cmp th{padding:3px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}#insp th,#cmp th{color:var(--mute);font-weight:500}
+.jc,.ec{display:inline-flex;height:auto;background:var(--bg2);color:var(--ink);font-size:11px;font-weight:500;padding:2px 6px;margin:1px;border-radius:6px;border:1px solid var(--line)}
+#insp .cur{background:var(--ok);color:var(--bg);border-color:transparent}#insp .fut{opacity:.55}#insp .pb{height:4px;border-radius:2px;background:var(--ok);margin-top:2px}#insp tr.chosen td{color:var(--ok)}
+/* insights */
+#insb{display:flex;flex-wrap:wrap;gap:6px}#insout{font-size:12.5px;line-height:1.55;margin-top:10px}#insout .src{font-size:11px;color:var(--faint);margin-bottom:6px;font-family:var(--mono)}
+
+/* ============ ANSWER PANEL ============ */
+#answer{position:fixed;left:calc(var(--lw) + 16px);right:calc(var(--rw) + 16px);bottom:60px;max-width:880px;margin-inline:auto;max-height:44vh;z-index:7;box-shadow:var(--shadow-md);padding:12px 16px 14px}
+#answer.panel.min{transform:translateY(14px)}
+#answer .s-empty,#answer .s-load,#answer .s-err,#answer .s-done{display:none}
+#answer[data-state=empty] .s-empty,#answer[data-state=load] .s-load,#answer[data-state=err] .s-err,#answer[data-state=done] .s-done{display:block}
+.empty-state{display:flex!important;gap:12px;align-items:center;color:var(--mute);font-size:13px;padding:4px 0}.empty-state .big svg{width:22px;height:22px;color:var(--faint)}
+.qline{margin-bottom:10px}.qline h3{font-size:15px;margin:2px 0 0;line-height:1.35}
+.top{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start}
+.prose{font-size:14.5px;line-height:1.65}.prose p{margin:0 0 .6em}.prose ul,.prose ol{margin:.2em 0 .7em 1.3em;padding:0}.prose code{background:var(--bg2);padding:1px 5px;border-radius:5px;font-size:12.5px}
+button.cite{height:18px;padding:0 6px;font:500 11px/18px var(--mono);border-radius:5px;background:var(--accent-soft);color:var(--accent);border:0;margin:0 1px;vertical-align:1px}
+.mode{font-size:12px;color:var(--mute);margin-top:6px}.conf{text-align:center;font-size:11px;color:var(--mute);max-width:90px;line-height:1.3}
+.ring{--p:0;width:54px;height:54px;border-radius:50%;background:conic-gradient(var(--ok) calc(var(--p)*1%),var(--line) 0);display:grid;place-items:center;margin:0 auto 4px}
+.ring span{width:42px;height:42px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font:600 12.5px var(--mono);color:var(--ink)}
+.evh{margin:14px 0 4px}#evs{display:flex;flex-direction:column}
+.ev{padding:8px 10px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:baseline;border-left:2px solid var(--accent);transition:background-color .15s;border-radius:0 6px 6px 0}.ev:hover{background:var(--hover)}
+.ev .pg{font:600 11.5px var(--mono);color:var(--accent);white-space:nowrap}.ev q{quotes:none;font-size:13px;line-height:1.55;color:var(--ink)}.ev .meta{font-size:11.5px;color:var(--mute);margin-top:3px}
+.skel i{display:block;height:11px;border-radius:5px;background:var(--hover2);margin:8px 0;animation:fadein .9s ease infinite alternate}.skel i:nth-child(2){width:88%}.skel i:nth-child(3){width:64%}
+.errmsg{display:flex;gap:8px;align-items:flex-start;color:var(--err);font-size:13px;margin-top:4px}.errmsg svg{width:16px;height:16px;stroke:var(--err)}
+
+/* ============ PAGES: monitor / benchmark / learn ============ */
+.seg{display:flex;gap:2px;padding:2px;background:var(--bg2);border:1px solid var(--line);border-radius:9px}.seg button{height:26px;padding:0 11px;font-size:12px;background:transparent;border:0;color:var(--mute);font-weight:500}.seg button[aria-pressed=true]{background:var(--panel);color:var(--ink);box-shadow:var(--shadow-sm)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:10px;margin-bottom:12px}.kpi{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:var(--panel)}
+.kpi small{display:block;color:var(--mute);font-size:11.5px}.kpi b{font-size:18px;font-weight:600}.kpi span{display:block;font-size:11px;color:var(--mute);margin-top:2px;overflow-wrap:anywhere}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px}.chart{border:1px solid var(--line);border-radius:var(--r);padding:12px;background:var(--panel)}.chart h3{margin:0 0 6px;font-size:12.5px}
+.chart .gl{stroke:var(--line);stroke-width:1}.chart .ax{fill:var(--mute);font:9px var(--mono)}.chart .ln{fill:none;stroke-width:1.7;stroke-linejoin:round}.chart .mk{stroke:var(--faint);stroke-dasharray:3 3}
+.legend2{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--mute);margin-top:4px}.legend2 i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.pbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:4px}.pbar i{display:block;height:100%;background:var(--ok)}
+#bench input[type=text]{margin:4px 0}#bout{max-width:920px;overflow-x:auto}#bout table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}#bout th,#bout td{padding:5px 6px;text-align:left;border-bottom:1px solid var(--line)}#bout th{color:var(--mute);font-weight:500}
+#bout .bar{height:5px;border-radius:3px;background:var(--accent);margin-top:3px}#bout .best{color:var(--ok);font-weight:600}
+#bout .ch{display:flex;width:100%;height:auto;justify-content:flex-start;text-align:left;background:none;border:0;font-size:12px;font-weight:400;padding:3px 0;white-space:normal}#bout .ch:hover{color:var(--accent)}#bout details{margin-top:6px}
+#bchart .barrow{display:flex;align-items:center;gap:8px;font-size:12px;margin:4px 0}#bchart .barrow span:first-child{width:120px;color:var(--mute);flex:none}#bchart .barrow i{display:block;height:10px;border-radius:5px;background:var(--accent2)}#bchart .best i{background:var(--ok)}
+.lrn h3{color:var(--accent);font-size:14px;margin:26px 0 6px}.lrn p{line-height:1.65;font-size:14px;max-width:780px;margin-bottom:8px}
+.eq{font-size:14px;background:var(--bg2);border:1px solid var(--line);padding:10px 14px;border-radius:var(--r);margin:8px 0;overflow-x:auto}
+.demo{border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:12px 0;background:var(--panel);overflow-x:auto}.demo table{border-collapse:collapse;font-size:12.5px;width:100%}.demo td,.demo th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left}.demo th{color:var(--mute);font-weight:500}
+.demo input[type=range]{width:100%}.demo output{font-family:var(--mono);color:var(--accent)}
+.lrn svg .edge{stroke:var(--line-hi)}.lrn svg text{fill:var(--mute)}
+
+/* ============ RESPONSIVE / MOTION / THEME TRANSITION ============ */
+@media(max-width:900px){#colL,#colR{left:12px;right:12px;width:auto;top:auto;bottom:12px;max-height:52vh}#answer{left:12px;right:12px;bottom:12px;max-width:none;max-height:52vh}body.sheet #tl{display:none!important}#nav .brandmini span{display:none}#tip{top:112px}}
+@media(max-width:560px){#wsbar{flex-direction:column;align-items:stretch}#cam{justify-content:flex-start}.pg-in{padding:16px 12px 60px}.top{grid-template-columns:1fr}.conf{justify-self:start}}
+html.theming *,html.theming *::before,html.theming *::after{transition:background-color .25s ease,color .25s ease,border-color .25s ease,fill .25s ease,stroke .25s ease!important}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<nav id="nav" role="tablist" aria-label="Main sections">
+  <h1 class="brandmini"><svg width="26" height="26" viewBox="0 0 38 38" aria-hidden="true"><circle cx="19" cy="19" r="4" style="fill:var(--warn)"/><g fill="none" style="stroke:var(--accent)" stroke-width="1.6"><ellipse cx="19" cy="19" rx="16" ry="6.5" transform="rotate(25 19 19)"/><ellipse cx="19" cy="19" rx="16" ry="6.5" transform="rotate(-35 19 19)" style="stroke:var(--accent2)"/></g></svg><span>Swarm Reader</span></h1>
+  <button class="tab home" id="tab-ws" role="tab" data-tab="ws" aria-selected="true" aria-controls="ws-area" title="The 3D graph and its tools">◉ 3D Workspace</button>
+  <span class="vsep" aria-hidden="true"></span>
+  <button class="tab" id="tab-activity" role="tab" data-tab="activity" aria-selected="false" aria-controls="pg-activity">Activity</button>
+  <button class="tab" id="tab-bench" role="tab" data-tab="bench" aria-selected="false" aria-controls="pg-bench">Benchmark</button>
+  <button class="tab" id="tab-learn" role="tab" data-tab="learn" aria-selected="false" aria-controls="pg-learn">How Colony Works</button>
+  <button class="tab" id="tab-monitor" role="tab" data-tab="monitor" aria-selected="false" aria-controls="pg-monitor">Colony Monitor</button>
+  <span class="spacer"></span>
+  <button id="themeBtn" class="icon-btn ghost" aria-pressed="false" aria-label="Switch to light theme" title="Switch to light theme" data-tip="Theme"><span id="themeIco" data-i="moon"></span></button>
+</nav>
+
+<div id="ws-area">
+<div id="colL" class="wsel">
+  <section class="card panel" id="pIn" aria-label="Input">
+    <div class="phead"><span class="ico" data-i="input"></span><h2>Input</h2><button class="pmin icon-btn ghost" data-p="in" aria-label="Minimize Input panel" title="Minimize Input"><span data-i="min"></span></button></div>
+    <div class="pbody">
+      <label id="drop" for="file"><b>Drop a PDF here</b>or click to choose a file</label>
+      <input id="file" type="file" accept="application/pdf" hidden>
+      <div id="stats"></div>
+      <input id="q" type="text" placeholder="Ask a question about the document" disabled aria-label="Question">
+      <div id="sugg"></div>
+      <div class="row"><button id="ask" class="primary" disabled>Release the ants</button><button id="replay" class="ghost" disabled>Replay</button></div>
+      <div class="row"><label for="spd">Speed</label><input id="spd" type="range" min=".5" max="4" step=".25" value="1.5"></div>
+      <div id="status" role="status">No document loaded.</div>
+      <details style="margin-top:12px"><summary>Top terms</summary><div id="topics" class="hint">Appears after reading.</div></details>
+      <details><summary>Reading the picture</summary><div class="hint">Each dot is a chunk of text; close dots have close meaning. Click a dot to read it, an ant or a gold trail to inspect it. Drag to orbit, scroll to zoom.</div></details>
+    </div>
+  </section>
+  <section class="card panel" id="pIns" aria-label="SwarmAI Insights">
+    <div class="phead"><span class="ico" data-i="ins"></span><h2>SwarmAI Insights</h2><button class="pmin icon-btn ghost" data-p="ins" aria-label="Minimize Insights panel" title="Minimize Insights"><span data-i="min"></span></button></div>
+    <div class="pbody">
+      <div id="insb"><button class="ghost sm" data-k="overview">Overview</button><button class="ghost sm" data-k="retrieval">Why these chunks?</button><button class="ghost sm" data-k="aco">How the colony behaved</button><button class="ghost sm" data-k="iteration">Explain this iteration</button><button class="ghost sm" data-k="selected">Explain selected ant / edge</button><button class="ghost sm" data-k="followups">Suggest questions</button><button class="ghost sm" data-k="benchmark">Interpret benchmark</button></div>
+      <div id="insout" class="hint">Explanations are computed from the recorded run. Gemini (if configured) only rephrases them.</div>
+    </div>
+  </section>
+</div>
+<div id="colR" class="wsel">
+  <section class="card panel" id="pInsp" aria-label="Inspector">
+    <div class="phead"><span class="ico" data-i="insp"></span><h2>Inspector</h2><button class="pmin icon-btn ghost" data-p="insp" aria-label="Minimize Inspector panel" title="Minimize Inspector"><span data-i="min"></span></button></div>
+    <div class="pbody">
+      <div id="inspD" style="display:none"><div id="insp"></div></div>
+      <div id="inspEmpty" class="hint">Click an ant, a gold pheromone trail or a chunk in the 3D graph to inspect it. Use “+ Compare” to compare two ants or two edges.</div>
+      <div id="cmp"></div>
+    </div>
+  </section>
+</div>
+<div id="wsbar" class="wsel"><div id="dock" role="toolbar" aria-label="Panels"></div>
+<div id="cam" role="toolbar" aria-label="Camera controls">
+  <button id="camAuto" aria-pressed="true">⟳ Auto-rotate: ON</button><button id="camIn" aria-label="Zoom in">＋</button><button id="camOut" aria-label="Zoom out">－</button><button id="camReset">Reset camera</button>
+  <button id="camChunk" disabled>Focus chunk</button><button id="camAnt" disabled>Focus ant</button><button id="camEdge" disabled>Focus edge</button>
+</div></div>
+</div>
+
+<main id="pages">
+<section class="page" id="pg-activity" role="tabpanel" aria-labelledby="tab-activity"><div class="pg-in">
+  <h2 class="ph">Activity</h2>
+  <div class="grid2">
+    <div class="card"><h3>Processing status</h3><div id="actStatus" class="hint">No document loaded.</div></div>
+    <div class="card"><h3>Uploaded documents</h3><ol id="hDocs" class="hl"><li class="hint">Nothing yet.</li></ol></div>
+    <div class="card"><h3>Previous queries</h3><ol id="hQs" class="hl"><li class="hint">Nothing yet.</li></ol></div>
+    <div class="card"><h3>Errors</h3><ol id="hErr" class="hl"><li class="hint">Nothing yet.</li></ol></div>
+  </div>
+  <section class="card" id="logcard"><h3>System events</h3><ol id="log"><li class="empty">The colony will report here.</li></ol></section>
+</div></section>
+
+<section class="page" id="pg-bench" role="tabpanel" aria-labelledby="tab-bench"><div class="pg-in">
+  <h2 class="ph">Benchmark</h2>
+  <section class="card" id="bench">
+    <input id="bq" type="text" placeholder="Question (defaults to the one in the Input panel)">
+    <input id="bexp" type="text" placeholder="Expected phrase in the answer (optional)">
+    <input id="brel" type="text" placeholder="Relevant pages, e.g. 2,5 (optional)">
+    <div class="row"><label for="breps">Runs</label><input id="breps" type="number" min="1" max="15" value="5" style="width:70px"><button id="bgo" class="primary" disabled>Run benchmark</button></div>
+    <div id="bout" class="hint">Upload a PDF in the 3D Workspace first, then run a benchmark here.</div>
+    <div id="bchart"></div>
+  </section>
+</div></section>
+
+<section class="page" id="pg-learn" role="tabpanel" aria-labelledby="tab-learn"><div class="pg-in lrn">
+  <h2 class="ph">How the colony works</h2>
+  <p class="hint">This page explains the algorithm and has small demos. The demos are self-contained: they never touch the running simulation.</p>
+  <h3>1. The chunk graph</h3>
+  <p>The PDF is cut into short chunks. Each chunk is a <b>node</b>. An <b>edge</b> joins two chunks that are close in meaning (8 nearest neighbours) or next to each other in the text. Edges carry a weight <i>w</i> (similarity, 0.6 for reading-order links) and a pheromone level <i>τ</i>.</p>
+  <svg viewBox="0 0 420 180" width="100%" style="max-width:520px" role="img" aria-label="Chunk graph with one ant path highlighted"><g class="edge" stroke-width="1.5"><line x1="40" y1="100" x2="120" y2="40"/><line x1="40" y1="100" x2="130" y2="130"/><line x1="120" y1="40" x2="130" y2="130"/><line x1="120" y1="40" x2="220" y2="80"/><line x1="130" y1="130" x2="220" y2="80"/><line x1="220" y1="80" x2="300" y2="30"/><line x1="220" y1="80" x2="310" y2="140"/><line x1="300" y1="30" x2="390" y2="90"/><line x1="310" y1="140" x2="390" y2="90"/></g><polyline points="40,100 120,40 220,80 300,30" fill="none" style="stroke:var(--trail)" stroke-width="3.5" stroke-linecap="round"/><g style="fill:var(--accent)"><circle cx="40" cy="100" r="7"/><circle cx="120" cy="40" r="7"/><circle cx="130" cy="130" r="7"/><circle cx="220" cy="80" r="7"/><circle cx="300" cy="30" r="7"/><circle cx="310" cy="140" r="7"/><circle cx="390" cy="90" r="7"/></g><circle cx="300" cy="30" r="5" style="fill:var(--ant)"/><text x="40" y="124" font-size="11" text-anchor="middle">start</text><text x="300" y="16" font-size="11" text-anchor="middle">ant stops</text></svg>
+  <p class="hint">Gold line: one ant's walk through the graph.</p>
+  <h3>2. Ants</h3>
+  <p>An <b>ant</b> is a short random walk: it starts at a chunk chosen in proportion to its relevance to your question, then takes up to 6 steps, never visiting a chunk twice. Each round releases 24 ants; at most 14 rounds run.</p>
+  <h3>3. Choosing the next chunk</h3>
+  <div class="eq">P(i→j) = τ<sub>ij</sub><sup>α</sup> · η<sub>j</sub><sup>β</sup> · w<sub>ij</sub> ÷ Σ<sub>k</sub> τ<sub>ik</sub><sup>α</sup> · η<sub>k</sub><sup>β</sup> · w<sub>ik</sub></div>
+  <p><b>τ (pheromone)</b> is the colony's memory: how much earlier good ants used this edge. <b>η (heuristic)</b> is how relevant the destination chunk is to your question (half keyword score, half embedding similarity). <b>α</b> and <b>β</b> set how much each counts: with α=0 the ant ignores memory; with β=0 it ignores relevance. This project uses α=1, β=2.</p>
+  <div class="demo"><b>Try it: probability calculator</b><div class="hint">Three candidate chunks A, B, C. Move the sliders and watch the probabilities.</div><div id="lCalc"></div></div>
+  <h3>4. Exploration versus exploitation</h3>
+  <p>Following the formula alone would make ants copy each other and lock onto early trails (exploitation). So with probability ε = 10% an ant ignores the formula and picks a random unvisited neighbour (exploration). The effective probability is (1−ε)·P + ε/n. The calculator above has an ε slider for this.</p>
+  <h3>5. Depositing pheromone</h3>
+  <p>After each round, the best quarter of ants (the <b>elite</b>, ranked by the sum of η along their path) lay pheromone on every edge they used: Δτ = (path quality) ÷ (path length). Pheromone is kept between 0.1 and 6 so no trail can vanish completely or grow without limit.</p>
+  <h3>6. Evaporation</h3>
+  <div class="eq">τ ← (1 − ρ) · τ  (then deposits are added)</div>
+  <p>Every round 35% (ρ) of every trail evaporates. Edges that stop being useful fade, so the colony can change its mind.</p>
+  <div class="demo"><b>Try it: one edge over 14 rounds</b><div class="hint">The edge is used by elite ants for the first N rounds, then abandoned.</div><div id="lEvap"></div></div>
+  <h3>7. Finding the best path and converging</h3>
+  <p>Each chunk also collects "heat" from the elite ants that pass through it. The hottest chunks hold the evidence for your answer. The colony <b>converges</b> when the five hottest chunks are the same for 3 rounds in a row (checked from round 5). If that never happens it stops at round 14. The <b>Colony Monitor</b> tab charts this for your own run.</p>
+</div></section>
+
+<section class="page" id="pg-monitor" role="tabpanel" aria-labelledby="tab-monitor"><div class="pg-in">
+  <div class="phead"><h2 class="ph" style="margin:0">Colony Monitor</h2><div id="monScope" class="seg" role="group" aria-label="Statistics scope"><button data-s="cur" aria-pressed="true">Current iteration</button><button data-s="cum" aria-pressed="false">Cumulative</button><button data-s="final" aria-pressed="false">Final run</button></div></div>
+  <div class="card" style="margin:14px 0"><h3>Live summary (follows the timeline)</h3><div id="mon" class="hint">Starts when the ants are released.</div></div>
+  <div id="monDash"></div>
+  <div class="card" style="margin-top:14px"><div class="phead"><h3 style="margin:0">Explain this iteration</h3><button id="expIter" class="ghost sm">Explain This Iteration</button></div><div id="monOut" class="hint">Generates an explanation from the recorded data of the iteration currently on the timeline.</div></div>
+</div></section>
+</main>
+
+<div id="tip" class="card wsel"></div>
+
+<section id="answer" class="card panel wsel" data-state="empty" aria-label="Answer">
+  <div class="phead"><span class="ico" data-i="ans"></span><h2>Answer</h2><button id="ansCopy" class="icon-btn ghost" aria-label="Copy answer" title="Copy answer" disabled><span data-i="copy"></span></button><button class="pmin icon-btn ghost" data-p="ans" aria-label="Minimize Answer panel" title="Minimize Answer"><span data-i="min"></span></button></div>
+  <div class="pbody" id="ansBody">
+    <div class="s-empty empty-state"><span class="big" data-i="ans"></span><p>Ask a question about your document. The answer appears here with its evidence and page references.</p></div>
+    <div class="s-load" role="status" aria-live="polite"><div class="qline"><span class="lbl">Question</span><h3 class="ansq"></h3></div><div class="skel"><i></i><i></i><i></i></div><p class="mode"><span class="spin"></span> <span id="ansLoadMsg">Releasing the ants…</span></p></div>
+    <div class="s-err" role="alert"><div class="qline"><span class="lbl">Question</span><h3 class="ansq"></h3></div><p class="errmsg"><span data-i="alert"></span><span id="ansErr"></span></p></div>
+    <div class="s-done"><div class="qline"><span class="lbl">Question</span><h3 class="ansq" id="ansQ"></h3></div>
+      <div class="top"><div><div class="prose" id="sum"></div><p class="mode" id="mode"></p></div>
+      <div class="conf"><div class="ring" id="ring"><span id="confn"></span></div><span title="Agreement among the final-round ant paths, adjusted by how relevant the evidence sentences are. It is NOT the probability that the answer is correct.">Evidence consensus</span></div></div>
+      <div class="lbl evh">Evidence</div><div id="evs"></div></div>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<div id="tl" class="card wsel"><button id="tlR" aria-label="Restart" title="Restart (rewind to the start, paused)">⏮</button><button id="tlP" aria-label="Previous iteration" title="Previous iteration">◀</button><button id="tlPP" aria-label="Pause or resume">⏸ Pause</button><button id="tlN" aria-label="Next iteration" title="Next iteration">▶</button><input id="tlS" type="range" min="0" max="0" value="0" aria-label="Iteration timeline"><span id="tlI"></span></div>
+<div id="htip" class="card wsel"></div>
+<script>
+const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+const cut=(s,n)=>s.length>n?s.slice(0,n-1)+'…':s;
+const hex=c=>'#'+c.toString(16).padStart(6,'0');
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let spd=1.5; $('spd').oninput=e=>spd=+e.target.value;
+let autoRot=!RM, curChunk=null; const view={cur:0,tgt:0,curY:0,tgtY:0};
+function applyView(){(view.cur||view.curY)?camera.setViewOffset(innerWidth,innerHeight,-view.cur,-view.curY,innerWidth,innerHeight):camera.clearViewOffset()}
+let THEME=document.documentElement.dataset.theme==='light'?'light':'dark';
+const COL_SETS={dark:{keyword:0x48C8D8,semantic:0x8B7CFF,entity:0x48C8D8,queen:0xF2B85B,skeptic:0xF16F78,synth:0x40C98B,reader:0x48C8D8,librarian:0x7AA2F7},
+ light:{keyword:0x0E8696,semantic:0x6656DB,entity:0x0E8696,queen:0xB8791E,skeptic:0xC23A48,synth:0x0F7A55,reader:0x0E8696,librarian:0x3B6FD1}};
+const SC={dark:{blend:THREE.AdditiveBlending,L:.64,S:.5,dust:0x6C7A99,sel:0xE8EDF5,label:'#000'},light:{blend:THREE.NormalBlending,L:.48,S:.55,dust:0x9AA6BA,sel:0x182230,label:'#fff'}};
+const SCN=()=>SC[THEME], COL=Object.assign({},COL_SETS[THEME]), TM=m=>(m.userData.th=1,m);
+const CV={keyword:'--ant',queen:'--trail',synth:'--ok',skeptic:'--err',semantic:'--accent',entity:'--accent2',reader:'--accent2',librarian:'--info'};
+const cvar=c=>CV[Object.keys(COL_SETS.dark).find(k=>COL_SETS.dark[k]===c||COL_SETS.light[k]===c)||'librarian'];
+
+/* ---------- activity log ---------- */
+function log(who,msg,color){const li=document.createElement('li');
+  const cv_=cvar(color);li.innerHTML=`<i style="color:var(${cv_});background:currentColor"></i><b style="color:var(${cv_})">${esc(who)}</b> ${esc(msg)}`;
+  const l=$('log');l.querySelector('.empty')?.remove();l.append(li);l.scrollTop=l.scrollHeight}
+function sep(text){const li=document.createElement('li');li.className='sep';li.textContent=text;const l=$('log');l.querySelector('.empty')?.remove();l.append(li);l.scrollTop=l.scrollHeight}
+const status=s=>{$('status').textContent=s;$('actStatus').textContent=s};
+
+/* ---------- scene ---------- */
+const scene=new THREE.Scene(), renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); document.body.prepend(renderer.domElement);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,1,2000);
+const sph={r:170,th:.6,ph:1.15}, target=new THREE.Vector3(), tGoal=new THREE.Vector3(); let rGoal=170, drag=false, moved=0;
+addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();applyView();layout()});
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',()=>{drag=true;moved=0;stopAuto()});
+addEventListener('pointerup',e=>{if(drag&&moved<4&&e.target===cv)pick(e);drag=false});
+addEventListener('pointermove',e=>{if(!drag)return;moved+=Math.abs(e.movementX)+Math.abs(e.movementY);sph.th-=e.movementX*.005;sph.ph=Math.min(3,Math.max(.2,sph.ph-e.movementY*.005))});
+cv.addEventListener('wheel',e=>{stopAuto();rGoal=Math.min(500,Math.max(30,rGoal*(1+e.deltaY*.001)))},{passive:true});
+
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),r=g.createRadialGradient(32,32,0,32,32,32);
+ r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.25,'rgba(255,255,255,.55)');r.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=r;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c)}
+const GLOW=glowTex();
+let DUST=null;
+{const n=700,p=new Float32Array(n*3);for(let i=0;i<n*3;i++)p[i]=(Math.random()-.5)*900;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ scene.add(DUST=new THREE.Points(g,new THREE.PointsMaterial({size:1.2,color:SCN().dust,transparent:true,opacity:.5})))}
+
+/* ---------- galaxy ---------- */
+let D=null, pts=null, base=[], bright=[], colArr=null, hue=[], agents=[], beams=[], marks=[], lastTrace=null;
+function buildGalaxy(d){
+  if(pts){scene.remove(pts);pts.geometry.dispose()} clearFx();
+  D=d; const n=d.chunks.length, pos=new Float32Array(n*3); colArr=new Float32Array(n*3); base=[];bright=[];hue=[];
+  d.chunks.forEach((c,i)=>{pos.set(c.pos,i*3);hue[i]=new THREE.Color().setHSL(((c.p*.11)%1),SCN().S,SCN().L);base[i]=.35;bright[i]=.35});
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(colArr,3));
+  pts=new THREE.Points(g,TM(new THREE.PointsMaterial({size:5,map:GLOW,vertexColors:true,transparent:true,depthWrite:false,blending:SCN().blend})));
+  scene.add(pts); rGoal=170; tGoal.set(0,0,0);
+}
+const P=i=>new THREE.Vector3(...D.chunks[i].pos);
+const lit=(i,v=1)=>{bright[i]=Math.max(bright[i],v)};
+
+/* ---------- agents, labels, beams ---------- */
+function label(text,color){const c=document.createElement('canvas');c.width=256;c.height=64;const g=c.getContext('2d');
+ g.font='600 26px Inter,system-ui,sans-serif';g.textAlign='center';g.fillStyle=hex(color);g.shadowColor=SCN().label;g.shadowBlur=8;g.fillText(text,128,40);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false}));s.scale.set(24,6,1);scene.add(s);return s}
+function agent(color,size,at,name){const s=new THREE.Sprite(TM(new THREE.SpriteMaterial({map:GLOW,color,transparent:true,blending:SCN().blend,depthWrite:false})));
+ s.scale.setScalar(size);s.position.copy(at);scene.add(s);const a={s,size,tw:null,l:name?label(name,color):null};agents.push(a);return a}
+function removeAgent(a){if(a.tw){const r=a.tw.res;a.tw=null;r()}scene.remove(a.s);if(a.l)scene.remove(a.l);agents=agents.filter(x=>x!==a)}
+const fly=(a,to,ms)=>new Promise(res=>{a.tw={f:a.s.position.clone(),to:to.clone(),t0:performance.now(),ms:ms/spd,res}});
+function beam(a,b,color,life=1200){const g=new THREE.BufferGeometry().setFromPoints([a,b]);
+ const l=new THREE.Line(g,TM(new THREE.LineBasicMaterial({color,transparent:true,opacity:.9,blending:SCN().blend})));scene.add(l);beams.push({l,t0:performance.now(),life:life/spd})}
+function mark(i,color){const s=new THREE.Sprite(TM(new THREE.SpriteMaterial({map:GLOW,color,transparent:true,blending:SCN().blend,depthWrite:false})));
+ s.scale.setScalar(11);s.position.copy(P(i));scene.add(s);marks.push(s)}
+function clearFx(){agents.forEach(a=>{scene.remove(a.s);if(a.l)scene.remove(a.l)});[...marks,...beams.map(b=>b.l)].forEach(o=>scene.remove(o));if(trail){scene.remove(trail);trail=null}agents=[];beams=[];marks=[]}
+
+/* ---------- loop ---------- */
+const ray=new THREE.Raycaster(); ray.params.Points.threshold=2.5;
+(function loop(){requestAnimationFrame(loop);
+ if(autoRot&&!drag&&!RM)sph.th+=.0004; if(view.cur!==view.tgt||view.curY!==view.tgtY){view.cur+=(view.tgt-view.cur)*.14;view.curY+=(view.tgtY-view.curY)*.14;if(Math.abs(view.cur-view.tgt)<.3)view.cur=view.tgt;if(Math.abs(view.curY-view.tgtY)<.3)view.curY=view.tgtY;applyView()} target.lerp(tGoal,.05); sph.r+=(rGoal-sph.r)*.05;
+ camera.position.set(target.x+sph.r*Math.sin(sph.ph)*Math.cos(sph.th),target.y+sph.r*Math.cos(sph.ph),target.z+sph.r*Math.sin(sph.ph)*Math.sin(sph.th));camera.lookAt(target);
+ const now=performance.now();
+ for(const a of agents){
+  if(a.tw){const k=Math.min(1,(now-a.tw.t0)/a.tw.ms),e=k*k*(3-2*k);a.s.position.lerpVectors(a.tw.f,a.tw.to,e);if(k>=1){const r=a.tw.res;a.tw=null;r()}}
+  if(a.l)a.l.position.set(a.s.position.x,a.s.position.y+a.size*.5+4,a.s.position.z)}
+ for(let i=beams.length-1;i>=0;i--){const b=beams[i],k=(now-b.t0)/b.life;if(k>=1){scene.remove(b.l);beams.splice(i,1)}else b.l.material.opacity=.9*(1-k)}
+ if(pts){for(let i=0;i<bright.length;i++){bright[i]+=(base[i]-bright[i])*.004*spd;const v=bright[i];if(THEME==='light'){const m=Math.min(1,.2+v*.8),k=.88;colArr[i*3]=k+(hue[i].r-k)*m;colArr[i*3+1]=k+(hue[i].g-k)*m;colArr[i*3+2]=k+(hue[i].b-k)*m}else{colArr[i*3]=hue[i].r*v;colArr[i*3+1]=hue[i].g*v;colArr[i*3+2]=hue[i].b*v}}pts.geometry.attributes.color.needsUpdate=true}
+ renderer.render(scene,camera)})();
+
+function pick(e){const t=hitTest(e);if(!t)return;if(t.type==='ant')selectAnt(t.ai);else if(t.type==='edge')selectEdge(t.a,t.b);else{sel={type:'node',i:t.i};showChunk(t.i);refreshSel()}}
+function showChunk(i){curChunk=i;syncCam();const c=D.chunks[i],tip=$('tip');tip.style.display='block';tip.innerHTML=`<small>Page ${c.p}</small>${esc(c.t)}`;lit(i,1.4);tGoal.copy(P(i));rGoal=80}
+
+/* ---------- phase 1: building the graph ---------- */
+let trail=null, trailArgs=null;
+function setTrail(edges,tmax){trailArgs=[edges,tmax];if(trail){scene.remove(trail);trail.geometry.dispose()}
+ const p=new Float32Array(edges.length*6),c=new Float32Array(edges.length*6);
+ edges.forEach(([i,j,v],k)=>{p.set(D.chunks[i].pos,k*6);p.set(D.chunks[j].pos,k*6+3);const t=Math.min(1,v/tmax),col=THEME==='light'?[.86+(.72-.86)*t,.87+(.47-.87)*t,.9+(.1-.9)*t]:[.95*t,.72*t,.36*t];c.set(col,k*6);c.set(col,k*6+3)});
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('color',new THREE.BufferAttribute(c,3));
+ trail=new THREE.LineSegments(g,TM(new THREE.LineBasicMaterial({vertexColors:true,transparent:true,blending:SCN().blend,depthWrite:false})));scene.add(trail)}
+async function readPhase(d){
+ $('log').innerHTML='';
+ log('Librarian',`${d.pages} pages → ${d.chunks.length} chunks. Built a graph of ${d.edges} links (nearest in meaning + next in reading order).`,COL.librarian);
+ status('Mapping the document…');
+ for(let i=0;i<d.chunks.length;i+=Math.ceil(d.chunks.length/40)){lit(i,1);await sleep(25/spd)}
+ $('topics').innerHTML=d.topics.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+ log('Librarian',d.semantic?'ready. Ants will smell meaning + keywords.':'ready. Keyword-only scent (install sentence-transformers for meaning).',COL.librarian);
+ log('Librarian',d.gemini?'Gemini key found: questions get expanded and answers written fluently.':'No GEMINI_API_KEY: answers will be quoted sentences.',COL.librarian);
+ status('Ready. Ask a question.')}
+
+/* ---------- phase 2: the colony ---------- */
+async function askPhase(tr,q){
+ clearFx(); clearSel(); setAnswerLoading(q,'The colony is exploring the document…'); sep('“'+cut(q,70)+'”');
+ if(!tr.iters.length){showAnswer(tr);status('Nothing in the document smells like this question.');return}
+ log('Librarian',tr.expanded?'Gemini wrote a hypothetical answer to widen the scent.':'Scent = BM25 + embeddings of your question.',COL.librarian);
+ for(const i of tr.hits)lit(i,.8);
+ log('Colony',`${tr.n_ants} ants per round. Each step picks a neighbour with probability ∝ pheromone × relevance.`,COL.queen);
+ const res=await runSim(tr);if(res==='aborted'){showAnswer(tr);status('Left the live run. Use the timeline to keep exploring.');return}
+ log('Colony',tr.converged?'Trails stopped changing: the colony converged.':'Reached the round limit.',COL.queen);
+ const sy=agent(COL.synth,16,new THREE.Vector3(0,60,0),'Reader');status('Reading the hottest chunks…');
+ for(const x of tr.answer){await fly(sy,P(x.cid),400);mark(x.cid,COL.synth);beam(sy.s.position,P(x.cid),COL.synth,1600)}
+ await fly(sy,new THREE.Vector3(0,30,0),400);showAnswer(tr);
+ log('Reader',`answer from ${tr.answer.length} hot chunk(s) · evidence consensus ${tr.consensus}%.`,COL.synth);
+ status(tr.answer.length?'Done. Click an evidence line to fly to it.':'No answer.')}
+const ANS={q:'',text:'',ev:[],consensus:0};
+function md(src){const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,;:!?])/g,'$1<i>$2</i>')
+  .replace(/\b(p\.\s?|page\s)(\d+)\b/gi,(m,a,n)=>`<button class="cite" data-pg="${n}" aria-label="Show evidence from page ${n}">${m}</button>`);
+ const out=[];let list=null,para=[];const fP=()=>{if(para.length){out.push('<p>'+para.join(' ')+'</p>');para=[]}},fL=()=>{if(list){out.push(`<${list.t}>${list.i.map(x=>'<li>'+x+'</li>').join('')}</${list.t}>`);list=null}};
+ for(const line of String(src||'').split('\n')){const b=line.match(/^\s*[-*]\s+(.*)/),n=line.match(/^\s*\d+[.)]\s+(.*)/);
+  if(b||n){fP();const t=b?'ul':'ol';if(list&&list.t!==t)fL();(list=list||{t,i:[]}).i.push(inl((b||n)[1]))}else if(!line.trim()){fP();fL()}else{fL();para.push(inl(line.trim()))}}
+ fP();fL();return out.join('')}
+function ansSet(state,q){const a=$('answer');a.dataset.state=state;a.querySelectorAll('.ansq').forEach(e=>e.textContent=q||'');$('ansCopy').disabled=state!=='done';renderDock();layout()}
+function setAnswerEmpty(){ANS.q=ANS.text='';ANS.ev=[];ansSet('empty','')}
+function setAnswerLoading(q,msg){ansSet('load',q);$('ansLoadMsg').textContent=msg||'Releasing the ants…'}
+function setAnswerError(q,msg){ansSet('err',q);$('ansErr').textContent=msg}
+function showAnswer(tr){const q=(lastTrace&&lastTrace.q)||'';
+ if(!tr.answer.length){$('sum').innerHTML='<p>I could not find a reliable answer in this document.</p>';$('mode').textContent='Try words that appear in the document.';$('ring').style.setProperty('--p',0);$('confn').textContent='0%';$('evs').innerHTML='';ANS.q=q;ANS.text='I could not find a reliable answer in this document.';ANS.ev=[];ansSet('done',q);return}
+ $('sum').innerHTML=md(tr.summary);
+ $('mode').textContent=tr.summary_mode==='gemini'?'Written by Gemini from the evidence below.':'Built from quoted sentences. Set GEMINI_API_KEY for a fluent answer.';
+ $('ring').style.setProperty('--p',tr.consensus);$('confn').textContent=tr.consensus+'%';
+ $('evs').innerHTML=tr.answer.map(x=>`<div class="ev" role="button" tabindex="0" data-c="${x.cid}" aria-label="Show chunk from page ${x.page}"><span class="pg">Page ${x.page}</span><div><q>${esc(x.text)}</q>
+  <div class="meta">${x.visits} of ${tr.n_ants} final-round ants passed here · pheromone ${Math.round(x.heat*100)}%</div></div></div>`).join('');
+ $('evs').querySelectorAll('.ev').forEach(e=>{e.onclick=()=>showChunk(+e.dataset.c);e.onkeydown=k=>{if(k.key==='Enter'||k.key===' '){k.preventDefault();showChunk(+e.dataset.c)}}});
+ ANS.q=q;ANS.text=tr.summary;ANS.ev=tr.answer;ANS.consensus=tr.consensus;ansSet('done',q)}
+$('sum').onclick=e=>{const b=e.target.closest('.cite');if(!b)return;const ev=ANS.ev.find(x=>String(x.page)===b.dataset.pg);if(ev)showChunk(ev.cid)};
+async function copyAnswer(){const t=`Question: ${ANS.q}\n\n${ANS.text}\n\nEvidence:\n`+ANS.ev.map(x=>`- (p.${x.page}) ${x.text}`).join('\n');let ok=true;
+ try{await navigator.clipboard.writeText(t)}catch(e){try{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();ok=!!document.execCommand('copy');ta.remove()}catch(e2){ok=false}}
+ const b=$('ansCopy'),s=b.querySelector('[data-i]');s.innerHTML=ok?ICO.check:ICO.alert;b.setAttribute('aria-label',ok?'Copied':'Copy failed');b.title=ok?'Copied':'Copy failed';
+ setTimeout(()=>{s.innerHTML=ICO.copy;b.setAttribute('aria-label','Copy answer');b.title='Copy answer'},1600)}
+$('ansCopy').onclick=copyAnswer;
+
+/* ---------- monitor + benchmark ---------- */
+function mon(tr,it,k){const f=(x,n=2)=>Number(x).toFixed(n);
+ $('mon').innerHTML=[['Iteration',`${k+1} / ${tr.iters.length}`],['Ants',tr.n_ants],['Best path quality',f(it.best_q)],['Average path quality',f(it.avg_q)],
+  ['Chunks explored',`${it.unique} / ${D.chunks.length}`],['Pheromone mean / max',`${f(it.tau_mean)} / ${f(it.tau_max)}`],
+  ['Status',k+1<tr.iters.length?'searching':(tr.converged?'converged':'round limit')]].map(([a,b])=>`<div><span>${a}</span><b>${b}</b></div>`).join('')}
+async function bench(){if(!docId){$('bout').textContent='Upload a PDF first.';return}
+ const q=$('bq').value.trim()||$('q').value.trim();if(!q){$('bout').textContent='Type a question.';return}
+ $('bgo').disabled=true;$('bgo').classList.add('loading');$('bout').innerHTML='<span class="spin"></span> Running…';
+ try{const r=await fetch('/api/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,doc_id:docId,expected:$('bexp').value,relevant_pages:$('brel').value,reps:+$('breps').value||5})});
+  const d=await r.json().catch(()=>({error:'Unexpected server response.'}));
+  if(d.error){$('bout').textContent=d.error;hist('errs',d.error);if(r.status===404)noDoc(d.error);return}renderBench(d)}
+ catch(e){$('bout').textContent='Request failed: '+e.message}finally{$('bgo').classList.remove('loading');if(docId)$('bgo').disabled=false}}
+function renderBench(d){const R=d.results,best=(f,hi)=>{const v=R.map(f).filter(x=>x!=null);return v.length?(hi?Math.max(...v):Math.min(...v)):null},
+ bl=best(r=>r.median_ms,0),bh=best(r=>r.hit_rate,1),bn=best(r=>r.metrics&&r.metrics.ndcg,1),mx=Math.max(...R.map(r=>r.median_ms))||1,p=d.preprocessing;
+ const mark=(v,b,t)=>v==null?'N/A':`<span class="${v===b?'best':''}">${t}</span>`;
+ $('bout').innerHTML=`<table><tr><th>Method</th><th>ms</th><th>Hit@5</th><th>nDCG</th><th>Pages</th></tr>`+R.map(r=>`<tr><td>${esc(r.method)}${r.stochastic?' ⟳':''}</td>
+  <td>${mark(r.median_ms,bl,r.median_ms)}<div class="bar" style="width:${Math.max(3,100*r.median_ms/mx)}%"></div></td>
+  <td>${mark(r.hit_rate,bh,Math.round(r.hit_rate*100)+'%')}</td><td>${r.metrics?mark(r.metrics.ndcg,bn,r.metrics.ndcg):'N/A'}</td><td>${r.pages.join(', ')}</td></tr>`).join('')+`</table>
+  <p>Latency = median over ${d.reps} runs of the ranking step only (top ${d.k}). ⟳ ACO is stochastic: seeded runs, Hit@5 is the share of runs that hit${d.has_labels?'; nDCG is the median across runs':''}.
+  Shared costs, not included above: query scoring ${p.query_scoring_ms} ms (per question), embedding ${p.embed_ms} ms and graph build ${p.graph_ms} ms (once per document).
+  ${d.has_expected?'':'Hit@5 needs an expected phrase. '}${d.has_labels?'':'Precision/recall/nDCG need relevant pages. '}Best values are highlighted; a single question is anecdotal, not proof.</p>`
+  +R.map(r=>`<details><summary>${esc(r.method)} · stability ${r.stochastic?r.stability:'n/a'}</summary>`+r.chunks.map(c=>`<button class="ch" data-c="${c.id}">p.${c.page}: ${esc(c.text.slice(0,110))}…</button>`).join('')+`</details>`).join('');
+ $('bchart').innerHTML=benchCharts(d);$('bout').querySelectorAll('.ch').forEach(b=>b.onclick=()=>{setTab('ws');showChunk(+b.dataset.c)})}
+$('bgo').onclick=bench;
+
+/* ---------- player, timeline, inspectors (all data comes from the recorded run on the server) ---------- */
+let sim=null, sel=null, selSeq=0, antObjs=[], selLine=null, trailEdges=[], cache={};
+const f3=(x,n=3)=>(x==null||isNaN(x))?'N/A':Number(x).toFixed(n), pc=x=>(100*x).toFixed(1)+'%', maxLen=it=>Math.max(...it.ants.map(p=>p.length));
+const tauIdx=()=>sim.mid?sim.k-1:sim.k;                       // iteration whose pheromone is on screen (-1 = initial)
+const antStep=(k,ai)=>{const p=sim.tr.iters[k].ants[ai];return sim.step==null?p.length-1:Math.min(sim.step,p.length-1)};
+async function getJ(url){if(cache[url])return cache[url];const r=await fetch(url),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed');return cache[url]=d}
+function drawAnts(k,step){antObjs.forEach(o=>removeAgent(o.a));antObjs=[];const it=sim.tr.iters[k];
+ it.ants.forEach((p,ai)=>{const s=step==null?p.length-1:Math.min(step,p.length-1);antObjs.push({a:agent(it.elite.includes(ai)?COL.synth:COL.keyword,6,P(p[s])),k,ai});lit(p[s],.7)});paintSel()}
+function showIter(k,step){sim.k=k;sim.step=step;sim.mid=step!=null&&step<maxLen(sim.tr.iters[k])-1;drawAnts(k,step);const ti=tauIdx();
+ if(ti>=0)setTrail(sim.tr.iters[ti].tau,sim.tr.tau_max);else if(trail){scene.remove(trail);trail=null}
+ trailEdges=ti>=0?sim.tr.iters[ti].tau:[];mon(sim.tr,sim.tr.iters[k],k);tlUpdate();refreshSel()}
+async function runSim(tr){sim={tr,k:0,step:0,mid:true,paused:false,playing:false,token:0,runId:tr.run_id};cache={};cmp.ants=[];cmp.edges=[];renderCmp();$('tl').style.display='flex';layout();return playFrom(0,0)}
+async function playFrom(k0,s0){const S=sim,tk=++S.token,dead=()=>S!==sim||tk!==S.token;S.playing=true;S.paused=false;tlUpdate();
+ try{for(let k=k0;k<S.tr.iters.length;k++){const it=S.tr.iters[k],ml=maxLen(it),from=k===k0?s0:0;showIter(k,from);
+   for(let s=from+1;s<ml;s++){await Promise.all(antObjs.filter(o=>it.ants[o.ai].length>s).map(o=>{lit(it.ants[o.ai][s],.7);return fly(o.a,P(it.ants[o.ai][s]),110)}));
+    if(dead())return 'aborted';S.step=s;S.mid=s<ml-1;tlUpdate();refreshSel();while(S.paused&&!dead())await sleep(60);if(dead())return 'aborted'}
+   showIter(k,null);log(`Round ${k+1}`,`${it.elite.length} best ants lay pheromone, ${Math.round(it.evap*100)}% evaporates. Hottest: ${it.top.slice(0,3).map(i=>'p.'+D.chunks[i].p).join(', ')}`,COL.queen);
+   await sleep(60/spd);while(S.paused&&!dead())await sleep(60);if(dead())return 'aborted'}
+  return 'done'}finally{if(!dead()){S.playing=false;tlUpdate()}}}
+function goto(k){sim.token++;sim.paused=true;sim.playing=false;showIter(Math.max(0,Math.min(sim.tr.iters.length-1,k)),null)}
+function tlUpdate(){if(!sim)return;if(document.body.dataset.tab==='monitor')renderMonitor();const n=sim.tr.iters.length,end=sim.k>=n-1&&!sim.mid;$('tlS').max=n-1;$('tlS').value=sim.k;
+ $('tlPP').textContent=sim.playing&&!sim.paused?'⏸ Pause':'▶ Resume';
+ $('tlI').textContent=`Iteration ${sim.k+1}/${n}`+(sim.mid?` · step ${sim.step}`:'')+(end?(sim.tr.converged?' · converged':' · round limit'):' · searching')+(sim.paused&&sim.playing?' · paused':'')}
+$('tlPP').onclick=()=>{if(!sim)return;if(sim.playing){sim.paused=!sim.paused;tlUpdate()}else if(sim.k>=sim.tr.iters.length-1&&!sim.mid)playFrom(0,0);else if(sim.mid)playFrom(sim.k,sim.step);else playFrom(sim.k+1,0)};
+$('tlP').onclick=()=>sim&&goto(sim.k-1);$('tlN').onclick=()=>sim&&goto(sim.mid?sim.k:sim.k+1);$('tlS').oninput=e=>sim&&goto(+e.target.value);
+$('tlR').onclick=()=>{if(!sim)return;sim.token++;sim.playing=false;showIter(0,0);sim.paused=true;tlUpdate()};
+
+/* selection */
+function hitTest(e){ray.setFromCamera({x:e.clientX/innerWidth*2-1,y:-(e.clientY/innerHeight)*2+1},camera);ray.params.Line.threshold=1.4;
+ if(sim&&antObjs.length){const h=ray.intersectObjects(antObjs.map(o=>o.a.s))[0];const o=h&&antObjs.find(o=>o.a.s===h.object);if(o)return{type:'ant',ai:o.ai}}
+ const ph=pts&&ray.intersectObject(pts)[0],lh=trail&&ray.intersectObject(trail)[0];
+ if(lh&&(!ph||ph.distanceToRay>lh.distanceToRay+.8)){const e2=trailEdges[Math.floor(lh.index/2)];if(e2)return{type:'edge',a:e2[0],b:e2[1],tau:e2[2]}}
+ return ph?{type:'node',i:ph.index}:null}
+function paintSel(){if(!sim)return;antObjs.forEach(o=>{const on=sel&&sel.type==='ant'&&sel.ai===o.ai;o.a.s.material.color.setHex(on?SCN().sel:(sim.tr.iters[o.k].elite.includes(o.ai)?COL.synth:COL.keyword));o.a.s.scale.setScalar(on?11:6)});
+ if(selLine){scene.remove(selLine);selLine=null}
+ if(sel&&sel.type==='edge'){selLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(sel.a),P(sel.b)]),new THREE.LineBasicMaterial({color:SCN().sel}));scene.add(selLine)}}
+function selectAnt(ai){sel={type:'ant',ai};const o=antObjs.find(o=>o.ai===ai);if(o){tGoal.copy(o.a.s.position);rGoal=90}refreshSel()}
+function selectEdge(a,b){sel={type:'edge',a,b};tGoal.copy(P(a).add(P(b)).multiplyScalar(.5));rGoal=80;refreshSel()}
+function clearSel(){sel=null;selSeq++;syncCam();$('inspD').style.display='none';paintSel();if(D){tGoal.set(0,0,0);rGoal=170}}
+const insp=html=>{$('inspD').style.display='block';$('insp').innerHTML=html};
+$('insp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='csel')clearSel();else if(b.id==='aiAnt')insight('ant',{iter:sim.k,ant:sel.ai});else if(b.id==='aiEdge')insight('edge',{a:sel.a,b:sel.b});else if(b.id==='cmpAnt')addCmp('ants',{k:sim.k,ai:sel.ai});else if(b.id==='cmpEdge')addCmp('edges',{a:Math.min(sel.a,sel.b),b:Math.max(sel.a,sel.b)});
+ else if(b.dataset.c!=null)showChunk(+b.dataset.c);else if(b.dataset.a!=null)selectEdge(+b.dataset.a,+b.dataset.b)};
+async function refreshSel(){syncCam();renderCmp();if(!sel||!sim){paintSel();return}const my=++selSeq;
+ try{if(sel.type==='ant'){const d=await getJ(`/api/trace/${sim.runId}/ant?iter=${sim.k}&ant=${sel.ai}`);if(my===selSeq)renderAnt(d)}
+  else if(sel.type==='edge'){const d=await getJ(`/api/trace/${sim.runId}/edge?a=${sel.a}&b=${sel.b}`);if(my===selSeq)renderEdge(d)}
+  else renderNode(sel.i)}catch(e){insp(`<div class="hint">${esc(e.message)}</div>`)}paintSel()}
+const hdr=t=>`<div class="ih"><b>${t}</b><button class="ghost sm" id="csel">Clear selection</button></div>`;
+const kv=(a,b)=>`<div class="kv"><span>${a}</span><b>${b}</b></div>`, cb=i=>`<button class="jc" data-c="${i}">#${i} · p.${D.chunks[i].p}</button>`;
+
+function decBlock(st,title,note){const order=[...st.cands.keys()].sort((a,b)=>st.p[b]-st.p[a]),k=st.chosen_idx,rest=order.slice(8).reduce((x,i)=>x+st.p[i],0);
+ return `<h4>${title}</h4>${note?`<div class="hint">${note}</div>`:''}
+ <div class="fm">P(i→j) = τ<sub>ij</sub><sup>α</sup>·η<sub>j</sub><sup>β</sup>·w<sub>ij</sub> ÷ Σ<sub>k∈N(i)</sub> τ<sub>ik</sub><sup>α</sup>·η<sub>k</sub><sup>β</sup>·w<sub>ik</sub> &nbsp;(α=${st.alpha}, β=${st.beta})</div>
+ <div class="fm">From chunk #${st.frm}, chosen #${st.to}: ${f3(st.tau[k])}<sup>${st.alpha}</sup> × ${f3(st.eta[k])}<sup>${st.beta}</sup> × ${f3(st.w[k])} = ${f3(st.num[k],4)}<br>Σ over ${st.cands.length} candidates = ${f3(st.sum_num,4)} → P = ${f3(st.num[k],4)} ÷ ${f3(st.sum_num,4)} = <b>${pc(st.p[k])}</b></div>
+ <table><tr><th>Candidate</th><th>τ</th><th>η</th><th>w</th><th>τ<sup>α</sup>η<sup>β</sup>w</th><th>P</th></tr>${order.slice(0,8).map(i=>`<tr class="${i===k?'chosen':''}"><td>${i===k?'✓ ':''}${cb(st.cands[i])}</td><td>${f3(st.tau[i])}</td><td>${f3(st.eta[i])}</td><td>${f3(st.w[i])}</td><td>${f3(st.num[i],4)}</td><td>${pc(st.p[i])}<div class="pb" style="width:${Math.max(2,st.p[i]*100)}%"></div></td></tr>`).join('')}</table>
+ ${order.length>8?`<div class="hint">+${order.length-8} more candidates: ${pc(rest)} combined</div>`:''}
+ <div class="hint">τ, η (relevance + 0.02 floor) and w are the values recorded at the moment of this decision. ${esc(st.reason)} With the ${pc(st.eps)} exploration rule the chosen chunk's effective probability was ${pc(st.effective[k])}.</div>`}
+function renderAnt(d){const path=sim.tr.iters[d.iter].ants[d.ant],s=antStep(d.iter,d.ant),n=sim.tr.iters.length,last=s>0?d.steps[s-1]:null,next=s<d.steps.length?d.steps[s]:null;
+ insp(hdr('Ant '+d.id+(d.elite?' <span class="tag">elite</span>':''))+kv('Iteration',`${d.iter+1} / ${n}`)+kv('Position',`step ${s} of ${path.length-1}${sim.mid?' (paused mid-iteration)':''}`)
+  +kv('Current chunk',cb(path[s]))+kv('Path so far',`${s+1} of ${path.length} chunks`)+kv('Path quality (Ση, whole walk)',f3(d.quality))+kv('Mean relevance',f3(d.mean_rel))
+  +kv('Pheromone deposited per edge',d.elite?f3(d.deposit):'0 (not elite)')
+  +`<h4>Journey</h4><div>${path.map((c,i)=>`<button class="jc ${i===s?'cur':''} ${i>s?'fut':''}" data-c="${c}">${i}. #${c} p.${D.chunks[c].p}</button>`).join('')}</div>`
+  +(s>0?`<h4>Edges taken</h4><div>${path.slice(0,s).map((c,i)=>`<button class="ec" data-a="${c}" data-b="${path[i+1]}">${c}→${path[i+1]}</button>`).join('')}</div>`:'')
+  +(last?decBlock(last,'Last decision (how it got here)'):`<h4>Start</h4><div class="hint">Placed at chunk #${path[0]} with probability ${pc(d.start_p)} (relevance<sup>β</sup> share over all chunks).</div>`)
+  +(next?decBlock(next,'Next recorded decision','Already recorded; the ant takes it on the next step.'):'<div class="hint">No further moves: the walk ended here.</div>')
+  +`<div style="margin-top:8px"><button class="ghost sm" id="aiAnt">Explain this ant</button> <button class="ghost sm" id="cmpAnt">+ Compare</button></div>`)}
+function renderEdge(d){const ti=tauIdx(),H=d.history,cur=ti>=0?H[ti].tau:d.initial,upto=H.slice(0,ti+1),sum=f=>upto.reduce((x,h)=>x+f(h),0),
+ ants=upto.flatMap(h=>h.ants.map(a=>`i${h.iter+1}-a${a+1}`)),pts_=[d.initial,...H.map(h=>h.tau)],mx=Math.max(...pts_,1),W=250,Hh=46,
+ xy=(v,i)=>`${(i/(pts_.length-1||1))*W},${Hh-(v/mx)*(Hh-4)-2}`,mi=ti+1,cons=d.considered.filter(c=>c.iter<=ti);
+ insp(hdr(`Pheromone edge ${d.a} ↔ ${d.b}`)+kv('Chunks',cb(d.a)+cb(d.b))+kv('Pages',d.pages.join(' · '))+kv('Link type',d.kind)+kv('Semantic similarity',f3(d.similarity,2))+kv('Edge weight w',f3(d.weight,2))
+  +kv(ti<0?'Pheromone (initial)':`Pheromone after iteration ${ti+1}`,f3(cur))+kv('Initial pheromone',f3(d.initial))+kv('Deposited so far',f3(sum(h=>h.deposited)))+kv('Evaporated so far',f3(sum(h=>h.evaporated)))+kv('Traversals so far',ants.length)
+  +`<h4>Ants that crossed it</h4><div class="hint">${ants.length?ants.slice(0,40).join(', ')+(ants.length>40?` … +${ants.length-40}`:''):'none yet'}</div>
+  <h4>Pheromone history</h4><svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}"><polyline fill="none" style="stroke:var(--trail)" stroke-width="1.6" points="${pts_.map(xy).join(' ')}"/><circle r="3.5" style="fill:var(--ink)" cx="${xy(pts_[mi],mi).split(',')[0]}" cy="${xy(pts_[mi],mi).split(',')[1]}"/></svg>
+  <h4>Considered by ants (${cons.length}${d.n_considered>d.considered.length?'+':''} so far)</h4><table><tr><th>Ant</th><th>Step</th><th>From</th><th>P (recorded)</th><th></th></tr>${cons.slice(0,12).map(c=>`<tr class="${c.chosen?'chosen':''}"><td>i${c.iter+1}-a${c.ant+1}</td><td>${c.step}</td><td>#${c.frm}</td><td>${pc(c.p)}</td><td>${c.chosen?'taken':''}</td></tr>`).join('')}</table>
+  <div class="hint" style="margin-top:6px">${esc(d.explanation)}</div>
+  <div class="hint" style="margin-top:6px"><i>An edge represents a relationship between two document chunks. Pheromone is a learned algorithmic weight that influences future ant movement. It does not represent text stored in the document.</i></div><div style="margin-top:8px"><button class="ghost sm" id="aiEdge">Explain this edge</button> <button class="ghost sm" id="cmpEdge">+ Compare</button></div>`)}
+function renderNode(i){const c=D.chunks[i];insp(hdr('Chunk #'+i)+kv('Page',c.p)+(sim?kv('In top-5 hottest this iteration',sim.tr.iters[sim.k].top.includes(i)?'yes':'no'):'')+`<div class="hint" style="margin-top:6px">${esc(c.t.slice(0,420))}${c.t.length>420?'…':''}</div>`)}
+
+/* hover tooltips */
+let hT=0;cv.addEventListener('pointermove',e=>{if(drag||!D)return;const n=performance.now();if(n-hT<60)return;hT=n;const h=hitTest(e),t=$('htip');if(!h){t.style.display='none';return}
+ t.textContent=h.type==='ant'?`Ant i${sim.k+1}-a${h.ai+1} · chunk #${sim.tr.iters[sim.k].ants[h.ai][antStep(sim.k,h.ai)]}`:h.type==='edge'?`Edge ${h.a}↔${h.b} · pheromone ${f3(h.tau,2)}`:`Chunk #${h.i} · page ${D.chunks[h.i].p}`;
+ t.style.left=Math.min(innerWidth-280,e.clientX+14)+'px';t.style.top=(e.clientY+14)+'px';t.style.display='block'});
+cv.addEventListener('pointerleave',()=>$('htip').style.display='none');
+
+/* SwarmAI Insights */
+async function insight(kind,extra={},target='insout'){if(target==='insout')setPanel('ins',true);if(!docId){$(target).textContent='Upload a PDF first.';return}$(target).innerHTML='<span class="spin"></span> Working…';
+ try{const r=await fetch('/api/insights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,doc_id:docId,run_id:sim?sim.runId:undefined,...extra})}),d=await r.json().catch(()=>({error:'Unexpected server response.'}));
+  if(d.error){$(target).textContent=d.error;if(r.status===404&&/document/.test(d.error))noDoc(d.error);return}
+  const src=`<div class="src">source: ${esc(d.source)}${d.cached?' · cached':''}${d.gemini_available?'':' · Gemini not configured, showing locally computed text'}</div>`;let b='';
+  if(kind==='overview'){const o=d.data;b=`<p>${esc(o.summary||'')}</p><b>Topics</b> ${o.topics.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}<br><b>Key concepts</b> ${esc((o.concepts||[]).join(', '))}`
+    +(o.definitions&&o.definitions.length?`<br><b>Definitions</b><ul>${o.definitions.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'')+(o.equations&&o.equations.length?`<b>Equations found</b><ul>${o.equations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'')
+    +`<b>Try asking</b><div id="qs">${(o.questions||[]).map(q=>`<button class="ghost" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}
+  else if(kind==='followups')b=d.questions.length?`<div id="qs">${d.questions.map(q=>`<button class="ghost" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>`:'No answerable suggestions found.';
+  else b=`<div style="white-space:pre-wrap">${esc(d.text)}</div>`;
+  $(target).innerHTML=src+b;$(target).querySelectorAll('[data-q]').forEach(x=>x.onclick=()=>{$('q').value=x.dataset.q;ask()})}
+ catch(e){$(target).textContent='Request failed: '+e.message}}
+$('insb').querySelectorAll('button').forEach(b=>b.onclick=()=>{const k=b.dataset.k;if(k==='iteration'){if(!sim)$('insout').textContent='Ask a question first.';else insight('iteration',{iter:sim.k})}else if(k==='selected'){if(sel&&sel.type==='ant')insight('ant',{iter:sim.k,ant:sel.ai});else if(sel&&sel.type==='edge')insight('edge',{a:sel.a,b:sel.b});else $('insout').textContent='Select an ant or a pheromone edge in the graph first.'}else insight(k)});
+
+
+/* ---------- navigation, panels, dock, camera ---------- */
+const TABS=['ws','activity','bench','learn','monitor'];
+function setTab(t){if(!TABS.includes(t))t='ws';document.body.dataset.tab=t;document.querySelectorAll('#nav .tab').forEach(b=>{const on=b.dataset.tab===t;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1});
+ if(location.hash!=='#'+t)history.replaceState(null,'','#'+t);if(t==='monitor')renderMonitor();if(t==='ws')layout()}
+$('nav').onclick=e=>{const b=e.target.closest('.tab');if(b)setTab(b.dataset.tab)};
+$('nav').onkeydown=e=>{if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;const i=TABS.indexOf(document.body.dataset.tab),n=TABS[(i+(e.key==='ArrowRight'?1:TABS.length-1))%TABS.length];setTab(n);$('tab-'+n).focus()};
+addEventListener('hashchange',()=>setTab(location.hash.slice(1)));
+const PN={in:['pIn','Input','input'],ins:['pIns','SwarmAI Insights','ins'],insp:['pInsp','Inspector','insp'],ans:['answer','Answer','ans']};
+let PS={in:true,ins:true,insp:true,ans:true};try{Object.assign(PS,JSON.parse(localStorage.getItem('swarm.panels')||'{}'))}catch(e){}
+const isNarrow=()=>innerWidth<=900;
+function setPanel(k,open){if(open&&isNarrow())for(const o in PS)if(o!==k)PS[o]=false;PS[k]=open;try{localStorage.setItem('swarm.panels',JSON.stringify(PS))}catch(e){}applyPanels()}
+function applyPanels(){for(const k in PN){const el=$(PN[k][0]);el.classList.toggle('min',!PS[k]);el.toggleAttribute('inert',!PS[k]);el.setAttribute('aria-hidden',String(!PS[k]))}renderDock(true);layout()}
+let dockHtml='';function renderDock(force){const st=$('answer').dataset.state,hh=Object.keys(PN).map(k=>{const dot=(k==='insp'&&sel)||(k==='ans'&&!PS.ans&&(st==='done'||st==='err'))?1:0,v=PS[k]?'Minimize':'Restore';
+  return `<button class="icon-btn" data-p="${k}" data-tip="${PN[k][1]}${PS[k]?'':' (minimized)'}" data-dot="${dot}" aria-pressed="${PS[k]}" aria-label="${v} ${PN[k][1]} panel" title="${v} ${PN[k][1]}">${ICO[PN[k][2]]}</button>`}).join('');
+ if(force||hh!==dockHtml){dockHtml=hh;$('dock').innerHTML=hh}}
+function layout(){const n=isNarrow(),L=!n&&(PS.in||PS.ins),R=!n&&PS.insp,rt=document.documentElement.style;rt.setProperty('--lw',L?'360px':'0px');rt.setProperty('--rw',R?'360px':'0px');
+ view.tgt=((L?360:0)-(R?360:0))/2;
+ const ah=(!n&&PS.ans)?($('answer').offsetHeight||0):0,tlh=$('tl').style.display==='flex'?56:0;view.tgtY=n?0:(108-(12+(ah?ah+60:0)+tlh))/2;document.body.classList.toggle('narrow',n);document.body.classList.toggle('sheet',n&&Object.values(PS).some(Boolean))}
+document.querySelectorAll('.pmin').forEach(b=>b.onclick=()=>setPanel(b.dataset.p,false));$('dock').onclick=e=>{const b=e.target.closest('button');if(b)setPanel(b.dataset.p,!PS[b.dataset.p])};
+function stopAuto(){if(autoRot){autoRot=false;syncCam()}}
+function syncCam(){const A=$('camAuto');A.textContent='⟳ Auto-rotate: '+(autoRot?'ON':'OFF');A.setAttribute('aria-pressed',String(autoRot));
+ $('camChunk').disabled=curChunk==null||!D;$('camAnt').disabled=!(sel&&sel.type==='ant');$('camEdge').disabled=!(sel&&sel.type==='edge');renderDock()}
+$('camAuto').onclick=()=>{autoRot=!autoRot;syncCam()};
+$('camIn').onclick=()=>{stopAuto();rGoal=Math.max(30,rGoal*.8)};$('camOut').onclick=()=>{stopAuto();rGoal=Math.min(500,rGoal*1.25)};
+$('camReset').onclick=()=>{stopAuto();tGoal.set(0,0,0);rGoal=170;sph.th=.6;sph.ph=1.15};
+$('camChunk').onclick=()=>{if(curChunk!=null&&D){stopAuto();tGoal.copy(P(curChunk));rGoal=80}};
+$('camAnt').onclick=()=>{const o=sel&&sel.type==='ant'&&antObjs.find(o=>o.ai===sel.ai);if(o){stopAuto();tGoal.copy(o.a.s.position);rGoal=90}};
+$('camEdge').onclick=()=>{if(sel&&sel.type==='edge'){stopAuto();tGoal.copy(P(sel.a).add(P(sel.b)).multiplyScalar(.5));rGoal=80}};
+
+/* ---------- activity history ---------- */
+const H={docs:[],qs:[],errs:[]};
+function hist(k,o){H[k].push({t:new Date().toLocaleTimeString(),o});renderHist()}
+function renderHist(){const L=(a,f)=>a.length?a.slice().reverse().map(x=>`<li><small>${x.t}</small>${f(x.o)}</li>`).join(''):'<li class="hint">Nothing yet.</li>';
+ $('hDocs').innerHTML=L(H.docs,o=>`<b>${esc(o.name)}</b> · ${o.pages} pages · ${o.chunks} chunks${o.warnings.length?` · ⚠ ${esc(o.warnings.join(' '))}`:''}`);
+ $('hQs').innerHTML=L(H.qs,o=>`${esc(o.q.slice(0,90))} · ${o.n} evidence · consensus ${o.c}%`);$('hErr').innerHTML=L(H.errs,o=>esc(o))}
+
+/* ---------- comparing two ants / two edges (data from the recorded trace) ---------- */
+const cmp={ants:[],edges:[]};let cmpSeq=0;
+function addCmp(k,o){const a=cmp[k],key=JSON.stringify(o);if(!a.some(x=>JSON.stringify(x)===key))a.push(o);if(a.length>2)a.shift();renderCmp()}
+const crow=(n,a,b)=>`<tr><td>${n}</td><td>${a}</td><td>${b}</td></tr>`,cchunks=l=>l.length?l.map(c=>`<button class="jc" data-c="${c}">#${c} p.${D.chunks[c].p}</button>`).join(''):'none';
+function cmpAnts(A,B){const pa=A.path,pb=B.path,sa=new Set(pa),sb=new Set(pb),com=pa.filter(c=>sb.has(c)),ua=pa.filter(c=>!sb.has(c)),ub=pb.filter(c=>!sa.has(c)),
+ ed=p=>new Set(p.slice(1).map((c,i)=>Math.min(c,p[i])+'-'+Math.max(c,p[i]))),eb=ed(pb),ce=[...ed(pa)].filter(e=>eb.has(e)),txt=p=>p.map(c=>`#${c} p.${D.chunks[c].p}`).join(' → ');
+ return `<table><tr><th></th><th>A · ${A.id}</th><th>B · ${B.id}</th></tr>`+crow('Path',txt(pa),txt(pb))+crow('Path length (chunks)',pa.length,pb.length)+crow('Path quality (Ση)',f3(A.quality),f3(B.quality))+crow('Mean relevance',f3(A.mean_rel),f3(B.mean_rel))
+  +crow('Elite',A.elite?'yes':'no',B.elite?'yes':'no')+crow('Pheromone per edge',f3(A.deposit),f3(B.deposit))+crow('Total pheromone contributed',f3(A.deposit*(pa.length-1)),f3(B.deposit*(pb.length-1)))+crow('Unique chunks',cchunks(ua),cchunks(ub))
+  +`</table><div class="kv"><span>Common chunks</span><b>${com.length}</b></div><div>${cchunks(com)}</div><div class="kv"><span>Common edges</span><b>${ce.length}</b></div><div class="hint">Total contributed = deposit per edge × edges on the path (0 for non-elite ants). Ants from different iterations met different pheromone levels.</div>`}
+function cmpEdges(A,B){const ti=tauIdx(),up=E=>E.history.slice(0,ti+1),sum=(E,k)=>up(E).reduce((x,y)=>x+y[k],0),cur=E=>ti>=0?E.history[ti].tau:E.initial,trv=E=>up(E).reduce((x,y)=>x+y.ants.length,0),
+ mx=Math.max(1,A.initial,...A.history.map(x=>x.tau),...B.history.map(x=>x.tau)),W=250,Hh=50,n=A.history.length+1,
+ pl=(E,c)=>`<polyline fill="none" style="stroke:${c}" stroke-width="1.6" points="${[E.initial,...E.history.map(x=>x.tau)].map((v,i)=>`${i/(n-1)*W},${Hh-v/mx*(Hh-4)-2}`).join(' ')}"/>`;
+ return `<table><tr><th></th><th>A · ${A.a}↔${A.b}</th><th>B · ${B.a}↔${B.b}</th></tr>`+crow('Endpoint chunks',cchunks([A.a,A.b]),cchunks([B.a,B.b]))+crow('Semantic similarity',f3(A.similarity,2),f3(B.similarity,2))+crow('Weight w',f3(A.weight,2),f3(B.weight,2))
+  +crow(ti<0?'Pheromone (initial)':`Pheromone after iteration ${ti+1}`,f3(cur(A)),f3(cur(B)))+crow('Traversals so far',trv(A),trv(B))+crow('Deposited so far',f3(sum(A,'deposited')),f3(sum(B,'deposited')))+crow('Evaporated so far',f3(sum(A,'evaporated')),f3(sum(B,'evaporated')))
+  +`</table><svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Pheromone history of both edges">${pl(A,'var(--trail)')}${pl(B,'var(--accent2)')}</svg><div class="hint"><span style="color:var(--trail)">■</span> A &nbsp;<span style="color:var(--accent2)">■</span> B · pheromone after each iteration (full history).</div>`}
+async function renderCmp(){const box=$('cmp'),my=++cmpSeq;if(!sim||(!cmp.ants.length&&!cmp.edges.length)){box.innerHTML='';return}let out='<h4>Comparison <button class="ghost sm" id="cmpClr">Clear</button></h4>';
+ try{if(cmp.ants.length){out+=`<div class="hint">Ants: ${cmp.ants.map(x=>`i${x.k+1}-a${x.ai+1}`).join(' vs ')}${cmp.ants.length<2?' · select another ant and press “+ Compare”':''}</div>`;
+   if(cmp.ants.length===2){const [A,B]=await Promise.all(cmp.ants.map(x=>getJ(`/api/trace/${sim.runId}/ant?iter=${x.k}&ant=${x.ai}`)));out+=cmpAnts(A,B)}}
+  if(cmp.edges.length){out+=`<div class="hint" style="margin-top:8px">Edges: ${cmp.edges.map(x=>`${x.a}↔${x.b}`).join(' vs ')}${cmp.edges.length<2?' · select another edge and press “+ Compare”':''}</div>`;
+   if(cmp.edges.length===2){const [A,B]=await Promise.all(cmp.edges.map(x=>getJ(`/api/trace/${sim.runId}/edge?a=${x.a}&b=${x.b}`)));out+=cmpEdges(A,B)}}}catch(e){out+=`<div class="hint">${esc(e.message)}</div>`}
+ if(my===cmpSeq)box.innerHTML=out}
+$('cmp').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='cmpClr'){cmp.ants=[];cmp.edges=[];renderCmp()}else if(b.dataset.c!=null)showChunk(+b.dataset.c)};
+
+/* ---------- Colony Monitor ---------- */
+let monScope='cur';
+function lineChart(title,series,n,o={}){const W=330,Hh=140,pl=34,pr=10,all=series.flatMap(s=>s.v),hi=o.ymax??(Math.max(...all,1e-9)*1.1),lo=o.ymin??0,x=i=>pl+(n<2?0:i/(n-1))*(W-pl-pr),y=v=>Hh-24-(v-lo)/((hi-lo)||1)*(Hh-38),
+ grid=[0,.5,1].map(t=>{const v=lo+(hi-lo)*t;return `<line class="gl" x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${pl-5}" y="${y(v)+3}" text-anchor="end">${f3(v,2)}</text>`}).join(''),
+ mk=o.mark!=null&&o.mark<n?`<line class="mk" x1="${x(o.mark)}" x2="${x(o.mark)}" y1="8" y2="${Hh-24}"><title>selected iteration ${o.mark+1}</title></line>`:'';
+ return `<div class="chart"><h3>${title}</h3><svg viewBox="0 0 ${W} ${Hh}" width="100%" role="img" aria-label="${esc(title)}">${grid}${mk}<text class="ax" x="${pl}" y="${Hh-8}">iter 1</text><text class="ax" x="${W-pr}" y="${Hh-8}" text-anchor="end">${n}</text>
+ ${series.map(s=>`<polyline class="ln" style="stroke:var(${s.c})" points="${s.v.map((v,i)=>`${x(i)},${y(v)}`).join(' ')}"/>${s.v.map((v,i)=>`<circle style="fill:var(${s.c})" cx="${x(i)}" cy="${y(v)}" r="${o.mark===i?4:2}"><title>iteration ${i+1} · ${esc(s.n)}: ${f3(v,3)}</title></circle>`).join('')}`).join('')}</svg>
+ <div class="legend2">${series.map(s=>`<span><i style="background:var(${s.c})"></i>${esc(s.n)}</span>`).join('')}</div></div>`}
+async function renderMonitor(){const box=$('monDash');if(!sim){box.innerHTML='<p class="hint">Ask a question in the 3D Workspace to start a colony run. This dashboard follows the timeline.</p>';return}
+ let st;try{st=await getJ(`/api/trace/${sim.runId}/stats`)}catch(e){box.textContent=e.message;return}
+ const A=st.per_iter,n=A.length,sc=monScope,k=sc==='final'?n-1:sim.k,R=sc==='cur'?[A[k]]:A.slice(0,k+1),S=A.slice(0,k+1),ants=st.params.ants,sum=key=>R.reduce((x,y)=>x+y[key],0),
+ midDone=(sc!=='final'&&sim.mid&&sim.step!=null)?sim.tr.iters[sim.k].ants.filter(p=>p.length-1<=sim.step).length:null,
+ rel=sc==='cur'?ants:ants*(k+1),done=midDone==null?rel:(sc==='cur'?midDone:ants*sim.k+midDone),
+ explored=sc==='cur'?new Set(sim.tr.iters[k].ants.flat()).size:A[k].explored,best=R.reduce((m,x)=>x.best_q>m.best_q?x:m),
+ same=(i)=>i>0&&new Set(A[i].top).size===new Set([...A[i].top,...A[i-1].top]).size,stab=[];A.forEach((_,i)=>stab.push(same(i)?(stab[i-1]||0)+1:0));
+ const jac=i=>{if(!i)return 0;const a=new Set(A[i].top),b=new Set(A[i-1].top),u=new Set([...a,...b]);return [...a].filter(c=>b.has(c)).length/u.size},
+ conv=Math.min(1,stab[k]/3),bins=A[k].tau_bins,bm=Math.max(...bins,1),lo=st.params.tau_min,hi=st.params.tau_max,
+ kpi=(l,v,s)=>`<div class="kpi"><small>${l}</small><b>${v}</b>${s?`<span>${s}</span>`:''}</div>`,pg=p=>[...new Set(p.map(c=>D.chunks[c].p))].join(', ');
+ const note=sim.mid&&sc!=='final'?`<p class="hint">Paused or playing mid-iteration: counts of completed journeys follow the animation; all other values are the recorded totals for iteration ${sim.k+1}.</p>`:'';
+ box.innerHTML=note+`<div class="kpis">`+kpi('Iteration',`${k+1} / ${n}`,sc==='final'?'whole run':sc==='cum'?'iterations 1–'+(k+1):'')+kpi('Ants released',rel)+kpi('Completed ant journeys',done)+kpi('Edge traversals',sum('traversals'))+kpi('Chunks explored',explored,sc==='cur'?'distinct in this iteration':'distinct so far')
+  +kpi('Pheromone deposited',f3(sum('deposited'),2))+kpi('Pheromone evaporated',f3(sum('evaporated'),2))+kpi('Best-performing ant',`i${best.iter+1}-a${best.best_ant+1}`,`quality ${f3(best.best_q)}`)
+  +kpi('Best path & score',f3(best.best_q),`chunks ${best.best_path.map(c=>'#'+c).join(' → ')} · pages ${pg(best.best_path)}`)+kpi('Average path quality',f3(R.reduce((x,y)=>x+y.avg_q,0)/R.length))
+  +kpi('Convergence',sc==='final'?(st.converged?'converged':'round limit'):`${stab[k]} / 3 stable`,`<div class="pbar"><i style="width:${(sc==='final'&&st.converged?1:conv)*100}%"></i></div>`)+`</div>
+ <div class="card" style="margin-bottom:14px"><h3>Pheromone distribution after iteration ${k+1} (${A[k].tau_edges} touched edges, mean ${f3(A[k].tau_mean,2)}, max ${f3(A[k].tau_max,2)})</h3><div style="display:flex;gap:6px;align-items:flex-end;height:90px">${bins.map((v,i)=>`<div style="flex:1;text-align:center;font-size:10px;color:var(--mute)"><div style="background:var(--accent);height:${Math.max(2,v/bm*70)}px;border-radius:3px 3px 0 0" title="${v} edges"></div>${(lo+i*(hi-lo)/8).toFixed(1)}</div>`).join('')}</div><div class="hint">Edges per pheromone level (τ).</div></div>
+ <div class="charts">`+lineChart('Best vs average path quality',[{n:'best',c:'--ok',v:S.map(x=>x.best_q)},{n:'average',c:'--warn',v:S.map(x=>x.avg_q)}],S.length,{mark:sim.k})
+  +lineChart('Pheromone evolution (mean and max τ)',[{n:'mean',c:'--trail',v:S.map(x=>x.tau_mean)},{n:'max',c:'--err',v:S.map(x=>x.tau_max)}],S.length,{mark:sim.k})
+  +lineChart('Exploration activity (steps per iteration)',[{n:'random exploration',c:'--accent2',v:S.map(x=>x.explore)},{n:'followed the formula',c:'--accent',v:S.map(x=>x.exploit)}],S.length,{mark:sim.k})
+  +lineChart('Convergence (overlap of the 5 hottest chunks with the previous iteration)',[{n:'overlap',c:'--ok',v:S.map((_,i)=>jac(i))}],S.length,{ymax:1,ymin:0,mark:sim.k})+`</div>`}
+$('monScope').onclick=e=>{const b=e.target.closest('button');if(!b)return;monScope=b.dataset.s;$('monScope').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderMonitor()};
+$('expIter').onclick=()=>{if(!sim){$('monOut').textContent='Ask a question first.';return}insight('iteration',{iter:sim.k},'monOut')};
+
+/* ---------- benchmark charts ---------- */
+function benchCharts(d){const R=d.results,bars=(t,f,fmt,hi)=>{const v=R.map(f),m=Math.max(...v.filter(x=>x!=null),1e-9),b=hi?Math.max(...v):Math.min(...v);return `<h3 style="margin-top:14px">${t}</h3>`+R.map((r,i)=>`<div class="barrow ${v[i]===b?'best':''}"><span>${esc(r.method)}</span><i style="width:${Math.max(2,(v[i]||0)/m*60)}%"></i><b>${fmt(v[i])}</b></div>`).join('')};
+ let o=bars('Latency (median ms, ranking only)',r=>r.median_ms,x=>x+' ms',false);
+ if(d.has_expected)o+=bars('Hit@5 (share of runs where the expected phrase is in the top 5)',r=>r.hit_rate,x=>Math.round(x*100)+'%',true);
+ if(d.has_labels)o+=bars('nDCG@5 (against the relevant pages)',r=>r.metrics.ndcg,x=>x.toFixed(2),true);
+ if(!d.has_expected&&!d.has_labels)o+='<p class="hint">Add an expected phrase or relevant pages to compare retrieval quality, not just speed.</p>';return o}
+
+/* ---------- How Colony Works: self-contained demos (never touch the simulation) ---------- */
+function learnInit(){const sl=(id,l,min,max,step,v)=>`<div><label for="${id}" class="hint">${l} <output id="${id}o">${v}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${v}"></div>`;
+ $('lCalc').innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${sl('lA','α (pheromone weight)',0,3,.1,1)}${sl('lB','β (relevance weight)',0,4,.1,2)}${sl('lE','ε (random exploration)',0,.5,.05,.1)}</div>
+ <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px">${[['A',1,.9,.6],['B',3,.3,.6],['C',1,.5,.9]].map(([c,t,e,w])=>`<div><b>Chunk ${c}</b>${sl('t'+c,'τ pheromone',.1,6,.1,t)}${sl('e'+c,'η relevance',0,1,.05,e)}${sl('w'+c,'w link weight',.1,1,.05,w)}</div>`).join('')}</div><div id="lOut" style="margin-top:10px"></div>`;
+ $('lEvap').innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${sl('vR','ρ evaporation',0,.9,.05,.35)}${sl('vD','deposit per round',0,3,.1,1)}${sl('vN','used for N rounds',0,14,1,6)}</div><div id="vOut" style="margin-top:8px"></div>`;
+ document.querySelectorAll('#lCalc input,#lEvap input').forEach(i=>i.oninput=()=>{$(i.id+'o').textContent=i.value;learnCalc();learnEvap()});learnCalc();learnEvap()}
+function learnCalc(){const g=id=>+$(id).value,al=g('lA'),be=g('lB'),ep=g('lE'),rows=['A','B','C'].map(c=>({c,t:g('t'+c),e:g('e'+c),w:g('w'+c)}));rows.forEach(r=>r.n=Math.pow(r.t,al)*Math.pow(r.e+.02,be)*r.w);const S=rows.reduce((x,r)=>x+r.n,0);
+ $('lOut').innerHTML=`<table><tr><th>Chunk</th><th>τ<sup>α</sup>·(η+0.02)<sup>β</sup>·w</th><th>P (formula)</th><th>P with ε</th></tr>${rows.map(r=>{const p=r.n/S,pe=(1-ep)*p+ep/3;return `<tr><td>${r.c}</td><td>${r.n.toFixed(4)}</td><td>${(p*100).toFixed(1)}% <div class="pbar"><i style="width:${p*100}%"></i></div></td><td>${(pe*100).toFixed(1)}%</td></tr>`}).join('')}</table><div class="hint">Σ = ${S.toFixed(4)}. The small +0.02 on η is a floor so an irrelevant chunk is never impossible.</div>`}
+function learnEvap(){const r=+$('vR').value,d=+$('vD').value,N=+$('vN').value,v=[1];for(let t=1;t<=14;t++)v.push(Math.min(6,Math.max(.1,(1-r)*v[t-1]+(t<=N?d:0))));
+ const W=330,Hh=80,mx=Math.max(...v,1),pts=v.map((x,i)=>`${i/14*W},${Hh-x/mx*(Hh-8)-4}`).join(' ');
+ $('vOut').innerHTML=`<svg viewBox="0 0 ${W} ${Hh}" width="100%" style="max-width:420px" role="img" aria-label="Pheromone of one edge over 14 rounds"><polyline fill="none" style="stroke:var(--trail)" stroke-width="2" points="${pts}"/>${N>0?`<line x1="${N/14*W}" y1="0" x2="${N/14*W}" y2="${Hh}" style="stroke:var(--faint)" stroke-dasharray="3"/>`:''}</svg><div class="hint">τ starts at 1.0. After round 14: <b>${v[14].toFixed(2)}</b>; peak ${Math.max(...v).toFixed(2)}. Dashed line: the edge stops being used. Each round: evaporate, then deposit; τ is kept within 0.1 to 6.</div>`}
+
+/* ---------- init ---------- */
+const ICO={
+ input:'<svg viewBox="0 0 16 16"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg>',
+ insp:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3"/></svg>',
+ ins:'<svg viewBox="0 0 16 16"><path d="M7 2l1.3 3.3L11.6 6.6 8.3 7.9 7 11.2 5.7 7.9 2.4 6.6l3.3-1.3zM12.5 9.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/></svg>',
+ ans:'<svg viewBox="0 0 16 16"><path d="M2.5 3.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5v-2.5h-.5a1 1 0 0 1-1-1z"/></svg>',
+ min:'<svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg>',
+ sun:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>',
+ moon:'<svg viewBox="0 0 16 16"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg>',
+ copy:'<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>',
+ check:'<svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></svg>',
+ alert:'<svg viewBox="0 0 16 16"><path d="M8 2l6.2 11H1.8zM8 6.5v3M8 11.3v.2"/></svg>'};
+document.querySelectorAll('[data-i]').forEach(e=>{if(!e.firstChild)e.innerHTML=ICO[e.dataset.i]||''});
+
+/* ---------- theme (dark / light) ---------- */
+function applyThemeScene(){const s=SCN();Object.assign(COL,COL_SETS[THEME]);
+ scene.traverse(o=>{const m=o.material;if(m&&m.userData&&m.userData.th){m.blending=s.blend;m.needsUpdate=true}});
+ if(DUST)DUST.material.color.setHex(s.dust);if(D)D.chunks.forEach((c,i)=>hue[i].setHSL((c.p*.11)%1,s.S,s.L));
+ marks.forEach(m=>m.material.color.setHex(COL.synth));if(trailArgs&&trail)setTrail(trailArgs[0],trailArgs[1]);if(sim)paintSel()}
+function setTheme(t,persist=true){const r=document.documentElement;THEME=t==='light'?'light':'dark';r.classList.add('theming');r.dataset.theme=THEME;
+ if(persist)try{localStorage.setItem('swarm.theme',THEME)}catch(e){}
+ const b=$('themeBtn'),lbl=THEME==='light'?'Switch to dark theme':'Switch to light theme';b.setAttribute('aria-pressed',String(THEME==='light'));b.setAttribute('aria-label',lbl);b.title=lbl;$('themeIco').innerHTML=ICO[THEME==='light'?'sun':'moon'];
+ document.querySelector('meta[name=theme-color]').setAttribute('content',THEME==='light'?'#F4F6FA':'#0B0D12');applyThemeScene();clearTimeout(setTheme.t);setTheme.t=setTimeout(()=>r.classList.remove('theming'),350)}
+$('themeBtn').onclick=()=>setTheme(THEME==='light'?'dark':'light');
+if(window.ResizeObserver)new ResizeObserver(()=>layout()).observe($('answer'));
+if(isNarrow()){PS.ins=false;PS.insp=false;PS.ans=false}
+setTheme(THEME,false);learnInit();renderHist();applyPanels();syncCam();setTab(location.hash.slice(1)||'ws');
+
+/* ---------- wiring ---------- */
+let busy=false, docId=null;
+async function interrupt(){if(busy&&sim&&sim.playing){sim.token++;sim.playing=false;await sleep(160)}}
+function noDoc(msg){docId=null;$('q').disabled=$('ask').disabled=$('bgo').disabled=true;status(msg)}
+async function loadFile(f){await interrupt();if(!f||busy)return;busy=true;docId=null;sim=null;clearSel();$('tl').style.display='none';$('insout').textContent='';lastTrace=null;$('replay').disabled=true;$('q').disabled=$('ask').disabled=$('bgo').disabled=true;
+ setAnswerEmpty();$('tip').style.display='none';$('bout').innerHTML='';$('mon').innerHTML='Starts when the ants are released.';status('Uploading and extracting text…');
+ const fd=new FormData();fd.append('pdf',f);
+ try{const r=await fetch('/api/ingest',{method:'POST',body:fd}),d=await r.json().catch(()=>({error:'Unexpected server response.'}));if(d.error){status(d.error);hist('errs',d.error);return}
+  docId=d.doc_id;hist('docs',{name:f.name,pages:d.pages,chunks:d.chunks.length,warnings:d.warnings||[]});buildGalaxy(d);
+  $('stats').style.display='flex';$('stats').innerHTML=`<span><b>${d.pages}</b> pages</span><span><b>${d.chunks.length}</b> chunks</span><span><b>${d.edges}</b> links</span><span>${d.semantic?'semantic on':'keyword only'}</span>`;
+  await readPhase(d);(d.warnings||[]).forEach(w=>log('Warning',w,COL.queen));$('q').disabled=$('ask').disabled=$('bgo').disabled=false;
+  $('sugg').innerHTML=d.topics.slice(0,3).map(t=>`<button>What is ${esc(t)}?</button>`).join('');
+  $('sugg').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('q').value=b.textContent;ask()})}
+ catch(err){status('Could not reach the server. Is server.py running?')}finally{busy=false}}
+$('file').onchange=e=>loadFile(e.target.files[0]);
+['dragenter','dragover'].forEach(t=>addEventListener(t,e=>{e.preventDefault();$('drop').classList.add('over')}));
+['dragleave','drop'].forEach(t=>addEventListener(t,e=>{e.preventDefault();$('drop').classList.remove('over')}));
+addEventListener('drop',e=>loadFile(e.dataTransfer.files[0]));
+async function ask(){await interrupt();const q=$('q').value.trim();if(!q||busy)return;if(!docId){status('Upload a PDF first.');return}busy=true;$('ask').disabled=true;$('ask').classList.add('loading');setAnswerLoading(q,'Sending the question…');status('Sending the question to the Queen…');
+ try{const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,doc_id:docId})}),t=await r.json().catch(()=>({error:'Unexpected server response.'}));
+  if(t.error){hist('errs',t.error);setAnswerError(q,t.error);if(r.status===404||r.status===400&&!docId)noDoc(t.error);else status(t.error);return}lastTrace={t,q};hist('qs',{q,c:t.consensus,n:(t.answer||[]).length});$('replay').disabled=false;await askPhase(t,q)}
+ catch(err){setAnswerError(q,'Request failed: '+err.message);status('Request failed: '+err.message)}finally{busy=false;$('ask').disabled=false;$('ask').classList.remove('loading')}}
+$('ask').onclick=ask;$('q').onkeydown=e=>{if(e.key==='Enter')ask()};
+$('replay').onclick=async()=>{await interrupt();if(busy||!lastTrace)return;busy=true;await askPhase(lastTrace.t,lastTrace.q);busy=false};
+</script>
+</body>
+</html>
