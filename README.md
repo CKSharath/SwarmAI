@@ -13,8 +13,8 @@ Swarm Reader cuts a PDF into chunks, links them into a graph, and releases a col
 - [Features](#features) · [Quick start](#quick-start) · [Using the app](#using-the-app)
 - [How it works](#how-it-works) · [Architecture](#architecture) · [API reference](#api-reference)
 - [Themes and design system](#themes-and-design-system) · [Configuration](#configuration)
-- [Testing](#testing) · [Benchmark methodology](#benchmark-methodology)
-- [Sessions and security](#sessions-and-security) · [Troubleshooting](#troubleshooting) · [Known limitations](#known-limitations)
+- [Benchmark methodology](#benchmark-methodology) · [Sessions and security](#sessions-and-security) 
+- [Troubleshooting](#troubleshooting) · [Known limitations](#known-limitations)
 
 ---
 
@@ -217,32 +217,6 @@ Tunable constants live at the top of `server.py` (`ANTS`, `ITERS`, `STEPS`, `ALP
 
 ---
 
-## Testing
-
-```bash
-pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest -q                       # 71 tests: backend, API, ACO, design-system lint
-
-python server.py &                        # the UI suites need the server running
-cd tests/ui && npm install
-npm test                                  # run.js + layout.js + polish.js   (or: node polish.js)
-```
-
-**Last verified results:** 71 backend/static tests passing; UI harness 27 + 80 + 46 = 153 checks passing.
-
-| Suite | Covers |
-|---|---|
-| `test_app.py` (33) | Valid/empty/non-PDF/corrupt/encrypted/oversized uploads, page-limit warnings, session isolation, expiry/eviction, Q&A errors, Gemini failure fallback, benchmark metrics and seeding, ACO edge cases (single node, disconnected graph, dead ends, bounds, determinism) |
-| `test_trace.py` (24) | Recorded probabilities match the formula and are not the latest values, trace/edge/iteration/stats endpoints, run isolation and retention, all insight kinds, Gemini numbers-guard |
-| `test_theme.py` (14) | Token parity between themes, no hard-coded colours, palette sync, WCAG contrast, icon-button names |
-| `ui/run.js` | Upload → ask → pause → pick ants/edges with the real raycaster → inspectors → timeline → benchmark → insights → stale-document handling |
-| `ui/layout.js` | Tabs (hash, keyboard, state preservation), panel minimize/restore and dock, graph re-centring, camera controls, ant/edge comparison, Colony Monitor scopes, learning demos |
-| `ui/polish.js` | Theme default/toggle/persistence and state preservation, scene recolouring in place, answer-panel states (empty/loading/success/error), markdown safety, copy, panel independence, no extra requests or listeners, accessibility checks, reduced motion |
-
-> **Honest scope of the UI tests.** They load the real `index.html` and three.js in **jsdom** with only WebGL stubbed, and drive it against the running server. They verify behaviour and state (classes, CSS variables, camera offsets, DOM content, recorded numbers), **not pixels**. Visual quality, overlap, transitions, fonts, touch input and real devices have **not** been verified in a real browser, and no screenshots are included.
-
----
-
 ## Benchmark methodology
 
 `POST /api/compare` ranks the top 5 chunks with BM25, semantic, hybrid 50/50, hybrid RRF and hybrid + ACO on identical chunks and scores.
@@ -289,8 +263,3 @@ npm test                                  # run.js + layout.js + polish.js   (or
 - Gemini rewriting has been tested with mocked responses and failure cases, not against the live service.
 - Not built: integrated PDF viewer, 2D graph view, conversation history, pheromone heatmap, ACO parameter playground, user accounts.
 
----
-
-## Contributing
-
-Run the full test suite before opening a PR, keep colours in the token blocks, and add a test with any behaviour change. No licence file is included yet; add one before publishing.
