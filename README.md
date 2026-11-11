@@ -156,19 +156,9 @@ The colony records each decision *as it happens*: candidates, τ, η, w, numerat
 swarmai/
 ├── server.py                # Flask app: ingest, retrieval, ACO + recording, trace API, insights, benchmark
 ├── static/index.html        # Single-file frontend: design tokens, panels, Three.js scene, inspectors, charts
-├── requirements.txt         # flask, pymupdf, numpy, sentence-transformers
-├── requirements-dev.txt     # pytest
-└── tests/
-    ├── conftest.py
-    ├── test_app.py          # ingestion, sessions/isolation, Q&A, benchmark, ACO unit tests
-    ├── test_trace.py        # decision recording, trace/stats endpoints, insights
-    ├── test_theme.py        # design-system lint: tokens, contrast, no hard-coded colours, a11y names
-    └── ui/                  # jsdom harness (needs the server running)
-        ├── run.js           # simulation, inspectors, timeline, benchmark, insights
-        ├── layout.js        # tabs, panels/dock, camera, comparison, monitor, demos
-        ├── polish.js        # themes, answer panel, accessibility, performance sanity
-        ├── sample.pdf
-        └── package.json
+└── requirements.txt         # flask, pymupdf, numpy, sentence-transformers
+
+
 ```
 
 Key backend pieces: `run_colony()` (Ant System with elitist deposit, MMAS-style bounds, optional recording), `store_run()` (per-session run store), `decision_view()` / `edge_view()` / `iter_stats()` (derived views over the recording), `compare()` (benchmark), `insights()` (local facts + optional Gemini rephrase with a numbers guard).
